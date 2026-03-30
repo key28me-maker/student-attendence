@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<title>Your Art Studio</title>
+
+<style>
+body {
+  margin:0;
+  font-family: sans-serif;
+  background: linear-gradient(135deg, #eef2f7, #dfe9f3);
+}
+
+.header {
+  background: #111;
+  color: white;
+  text-align: center;
+  padding: 25px;
+}
+
+.search { padding:15px; }
+.search input {
+  width:100%;
+  padding:15px;
+  font-size:18px;
+  border-radius:12px;
+  border:none;
+}
+
+.student {
+  background:white;
+  margin:12px;
+  padding:20px;
+  border-radius:18px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.name { font-size:20px; font-weight:bold; }
+.count { font-size:14px; color:#666; }
+
+.attend-btn {
+  background:#4CAF50;
+  font-size:18px;
+  padding:15px 22px;
+  border-radius:12px;
+  border:none;
+  color:white;
+}
+
+.admin-btn {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background: #333;
+  font-size: 12px;
+  padding: 8px;
+  opacity: 0.2;
+}
+
+.admin-panel {
+  display:none;
+  padding:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  <h1>Your Art Studio</h1>
+  <p>출석 체크</p>
+</div>
+
+<div class="search">
+  <input id="search" placeholder="이름 검색" oninput="render()">
+</div>
+
+<div id="list"></div>
+
+<button class="admin-btn" onclick="toggleAdmin()">관리자</button>
+
+<div class="admin-panel" id="adminPanel">
+  <input id="nameInput" placeholder="학생 이름">
+  <button onclick="addStudent()">추가</button>
+</div>
+
+<!-- 🔊 소리 -->
+<audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+let students = [];
+let history = {};
+let isAdmin = false;
+let db;
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
+  authDomain: "student-attendence-e9f58.firebaseapp.com",
+  databaseURL: "https://student-attendence-e9f58-default-rtdb.firebaseio.com",
+  projectId: "student-attendence-e9f58"
+};
+
+firebase.initializeApp(firebaseConfig);
+db = firebase.database();
+
+db.ref("data").on("value", (snap) => {
+  const val = snap.val();
+  if (val) {
+    students = val.students || [];
+    history = val.history || {};
+    render();
+  }
+});
+
+function save() {
+  db.ref("data").set({ students, history });
+}
+
+function today() {
+  return new Date().toISOString().split("T")[0];
+}
+function nowTime() {
+  return new Date().toLocaleTimeString();
+}
+
+function toggleAdmin() {
+  const pw = prompt("비밀번호");
+  if (pw === "1234") {
+    isAdmin = !isAdmin;
+    document.getElementById("adminPanel").style.display = isAdmin ? "block" : "none";
+  }
+}
+
+function addStudent() {
+  const name = document.getElementById("nameInput").value.trim();
+  if (!name) return;
+  students.push({ name, count: 10 });
+  save();
+  render();
+}
+
+function attend(i) {
+  if (students[i].count <= 0) return;
+
+  document.getElementById("sound").play();
+
+  const name = students[i].name;
+  const date = today();
+
+  if (!history[date]) history[date] = [];
+  history[date].push({ name, time: nowTime() });
+
+  students[i].count--;
+  save();
+  render();
+}
+
+// 🔥 출석 수정 (삭제)
+function showLogs(name) {
+  if (!isAdmin) return;
+
+  let msg = name + " 출석기록\n\n";
+
+  Object.keys(history).forEach(date => {
+    history[date].forEach(r => {
+      if (r.name === name) {
+        msg += date + " " + r.time + "\n";
+      }
+    });
+  });
+
+  const delDate = prompt(msg + "\n삭제할 날짜 입력 (예: 2026-03-30)");
+
+  if (!delDate) return;
+
+  if (history[delDate]) {
+    history[delDate] = history[delDate].filter(r => r.name !== name);
+
+    const student = students.find(s => s.name === name);
+    if (student) student.count++;
+
+    save();
+    render();
+    alert("삭제 완료");
+  } else {
+    alert("해당 날짜 없음");
+  }
+}
+
+function filteredStudents() {
+  const q = document.getElementById("search").value.toLowerCase();
+  return students.filter(s => s.name.toLowerCase().includes(q));
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  filteredStudents().forEach((s,i)=>{
+    const realIndex = students.indexOf(s);
+
+    const div = document.createElement("div");
+    div.className = "student";
+
+    div.innerHTML = `
+      <div onclick="showLogs('${s.name}')">
+        <div class="name">${s.name}</div>
+        <div class="count">남은 ${s.count}회</div>
+      </div>
+      <button class="attend-btn" onclick="attend(${realIndex})">출석</button>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+render();
+</script>
+
+</body>
+</html>
