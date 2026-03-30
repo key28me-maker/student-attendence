@@ -40,6 +40,7 @@ body {
   display:flex;
   justify-content:space-between;
   align-items:center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
 .name { font-size:20px; font-weight:bold; }
@@ -91,10 +92,8 @@ body {
   <button onclick="addStudent()">추가</button>
 </div>
 
-<!-- 🔊 소리 -->
 <audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
@@ -139,6 +138,7 @@ function toggleAdmin() {
   if (pw === "1234") {
     isAdmin = !isAdmin;
     document.getElementById("adminPanel").style.display = isAdmin ? "block" : "none";
+    render();
   }
 }
 
@@ -166,11 +166,11 @@ function attend(i) {
   render();
 }
 
-// 🔥 출석 수정 (삭제)
+// 🔥 출석 삭제 + 횟수 수정
 function showLogs(name) {
   if (!isAdmin) return;
 
-  let msg = name + " 출석기록\n\n";
+  let msg = name + " 기록\n\n";
 
   Object.keys(history).forEach(date => {
     history[date].forEach(r => {
@@ -180,21 +180,25 @@ function showLogs(name) {
     });
   });
 
-  const delDate = prompt(msg + "\n삭제할 날짜 입력 (예: 2026-03-30)");
+  let action = prompt(msg + "\n1: 날짜삭제 / 2: 횟수수정");
 
-  if (!delDate) return;
+  if (action === "1") {
+    let d = prompt("삭제 날짜 입력 (예: 2026-03-30)");
+    if (history[d]) {
+      history[d] = history[d].filter(r => r.name !== name);
+      let s = students.find(x=>x.name===name);
+      if (s) s.count++;
+      save(); render();
+    }
+  }
 
-  if (history[delDate]) {
-    history[delDate] = history[delDate].filter(r => r.name !== name);
-
-    const student = students.find(s => s.name === name);
-    if (student) student.count++;
-
-    save();
-    render();
-    alert("삭제 완료");
-  } else {
-    alert("해당 날짜 없음");
+  if (action === "2") {
+    let s = students.find(x=>x.name===name);
+    let v = prompt("새 횟수", s.count);
+    if (v!==null) {
+      s.count = Number(v);
+      save(); render();
+    }
   }
 }
 
