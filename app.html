@@ -7,66 +7,57 @@
 
 <style>
 body {
-  margin:0;
-  font-family:sans-serif;
+  font-family: sans-serif;
   background:#c1e5d2;
+  padding:20px;
   font-size:20px;
 }
 
-.header {
-  text-align:center;
-  padding:20px;
-}
+h1 { text-align:center; }
 
 .top {
   display:flex;
   gap:10px;
-  padding:10px;
+  margin-bottom:10px;
 }
 
 input {
   flex:1;
-  padding:16px;
-  font-size:18px;
-  border-radius:10px;
+  padding:14px;
+  font-size:20px;
+}
+
+button {
+  padding:14px;
   border:none;
+  border-radius:10px;
+  background:#2e7d32;
+  color:white;
+  font-size:20px;
 }
 
 .student {
   background:white;
-  margin:20px;
-  padding:25px;
-  border-radius:16px;
+  padding:18px;
+  margin-bottom:10px;
+  border-radius:12px;
   display:flex;
   justify-content:space-between;
   align-items:center;
+  transition:0.2s;
 }
 
-button {
-  background:#4CAF50;
-  color:white;
-  border:none;
-  padding:16px;
-  font-size:18px;
-  border-radius:12px;
+.student:active {
+  transform:scale(0.97);
 }
 
 .delete { background:red; }
 
-.admin {
-  position:fixed;
-  bottom:10px;
-  right:10px;
-  background:#333;
-  font-size:12px;
-}
-
-/* 📅 달력 모달 */
-#calendarWrap {
+.calendarModal {
   position:fixed;
   top:0; left:0;
   width:100%; height:100%;
-  background:rgba(0,0,0,0.4);
+  background:rgba(0,0,0,0.5);
   display:none;
   justify-content:center;
   align-items:center;
@@ -75,7 +66,7 @@ button {
 .calendarBox {
   background:white;
   padding:20px;
-  border-radius:16px;
+  border-radius:15px;
   width:90%;
   max-width:500px;
 }
@@ -83,7 +74,6 @@ button {
 .calendarHeader {
   display:flex;
   justify-content:space-between;
-  align-items:center;
   margin-bottom:10px;
 }
 
@@ -95,81 +85,75 @@ button {
 
 .day {
   padding:12px;
+  background:#eee;
   text-align:center;
   border-radius:8px;
-  background:#eee;
 }
 
+/* 출석 표시 */
 .active {
-  background:#4CAF50;
+  background:#4caf50;
   color:white;
 }
+
+/* 오늘 */
+.today {
+  border:3px solid #5f9578;
+}
+
+/* 주말 */
+.sunday {
+  color:#e881c6;
+  font-weight:bold;
+}
+
+.saturday {
+  color:#82d3e8;
+  font-weight:bold;
+}
+
 </style>
 </head>
 
 <body>
 
-<div class="header">
-  <h2>출석 체크</h2>
-</div>
+<h1>출석 체크</h1>
 
 <div class="top">
   <input id="search" placeholder="이름 검색" oninput="render()">
 </div>
 
-<div class="top" id="adminPanel" style="display:none;">
+<div class="top">
   <input id="nameInput" placeholder="학생 이름">
   <button onclick="addStudent()">추가</button>
 </div>
 
 <div id="list"></div>
 
-<button class="admin" onclick="toggleAdmin()">관리자</button>
-
-<!-- 📅 달력 -->
-<div id="calendarWrap">
-  <div class="calendarBox" id="calendarBox">
+<!-- 달력 -->
+<div class="calendarModal" id="calendarModal" onclick="closeCalendar(event)">
+  <div class="calendarBox">
     <div class="calendarHeader">
       <button onclick="prevMonth()">◀</button>
       <div id="monthTitle"></div>
       <button onclick="nextMonth()">▶</button>
     </div>
-    <div id="calendar"></div>
+    <div class="calendar" id="calendar"></div>
   </div>
 </div>
 
-<audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
-
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
-  authDomain: "student-attendence-e9f58.firebaseapp.com",
-  databaseURL: "https://student-attendence-e9f58-default-rtdb.firebaseio.com",
-  projectId: "student-attendence-e9f58"
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-let students = [];
-let history = {};
-let isAdmin = false;
-
+let students = JSON.parse(localStorage.getItem("students")) || [];
+let history = JSON.parse(localStorage.getItem("history")) || {};
 let selectedStudent = null;
 let currentDate = new Date();
 
-db.ref("data").on("value", snap => {
-  const val = snap.val() || {};
-  students = val.students || [];
-  history = val.history || {};
-  render();
-});
+// 🔊 소리
+const sound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
 
 function save() {
-  db.ref("data").set({ students, history });
+  localStorage.setItem("students", JSON.stringify(students));
+  localStorage.setItem("history", JSON.stringify(history));
 }
 
 function today() {
@@ -180,69 +164,106 @@ function nowTime() {
   return new Date().toLocaleTimeString();
 }
 
-function toggleAdmin() {
-  const pw = prompt("비밀번호");
-  if (pw === "1234") {
-    isAdmin = !isAdmin;
-    document.getElementById("adminPanel").style.display = isAdmin ? "flex" : "none";
-  }
-}
-
 function addStudent() {
   const name = document.getElementById("nameInput").value.trim();
   if (!name) return;
   students.push({ name, count: 10 });
   save();
+  render();
 }
 
-function deleteStudent(i) {
-  if (!confirm("삭제?")) return;
-  students.splice(i,1);
-  save();
-}
-
-function attend(i, el) {
-  if (students[i].count <= 0) return;
-
-  const sound = document.getElementById("sound");
-  sound.currentTime = 0;
-  sound.play().catch(()=>{});
-
-  el.style.transform="scale(0.9)";
-  setTimeout(()=>el.style.transform="scale(1)",100);
-
+function attend(i) {
   const name = students[i].name;
   const date = today();
 
   if (!history[date]) history[date] = [];
   history[date].push({ name, time: nowTime() });
 
-  students[i].count--;
+  sound.currentTime = 0;
+  sound.play();
+
   save();
+  render();
 }
 
-function filtered() {
+function deleteStudent(i) {
+  if (!confirm("삭제?")) return;
+  students.splice(i,1);
+  save();
+  render();
+}
+
+function filteredStudents() {
   const q = document.getElementById("search").value.toLowerCase();
   return students.filter(s => s.name.toLowerCase().includes(q));
 }
 
-function showCalendar(name) {
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  filteredStudents().forEach((s,i)=>{
+    const realIndex = students.indexOf(s);
+
+    const div = document.createElement("div");
+    div.className = "student";
+
+    div.innerHTML = `
+      <div onclick="openCalendar('${s.name}')">
+        ${s.name}
+      </div>
+      <div>
+        <button onclick="attend(${realIndex})">출석</button>
+        <button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>
+      </div>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+/* 📅 달력 */
+function openCalendar(name) {
   selectedStudent = name;
-  document.getElementById("calendarWrap").style.display = "flex";
+  document.getElementById("calendarModal").style.display = "flex";
   drawCalendar();
+}
+
+function closeCalendar(e) {
+  if (e.target.id === "calendarModal") {
+    document.getElementById("calendarModal").style.display = "none";
+  }
 }
 
 function drawCalendar() {
   const cal = document.getElementById("calendar");
   cal.innerHTML = "";
-  
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   document.getElementById("monthTitle").innerText =
     year + "년 " + (month+1) + "월";
 
+  const firstDay = new Date(year, month, 1).getDay();
   const lastDay = new Date(year, month+1, 0).getDate();
+  const todayStr = today();
+
+  const days = ["일","월","화","수","목","금","토"];
+  days.forEach((d,i)=>{
+    const div = document.createElement("div");
+    div.className = "day";
+    div.innerText = d;
+
+    if (i===0) div.classList.add("sunday");
+    if (i===6) div.classList.add("saturday");
+
+    cal.appendChild(div);
+  });
+
+  for (let i=0;i<firstDay;i++) {
+    cal.appendChild(document.createElement("div"));
+  }
 
   for (let i=1;i<=lastDay;i++) {
     const date = year + "-" + String(month+1).padStart(2,"0") + "-" + String(i).padStart(2,"0");
@@ -251,21 +272,18 @@ function drawCalendar() {
     div.className = "day";
     div.innerText = i;
 
+    const dayOfWeek = new Date(year, month, i).getDay();
+
+    if (dayOfWeek === 0) div.classList.add("sunday");
+    if (dayOfWeek === 6) div.classList.add("saturday");
+
+    if (date === todayStr) div.classList.add("today");
+
     if (history[date]) {
       history[date].forEach(r=>{
         if (r.name === selectedStudent) div.classList.add("active");
       });
     }
-
-    div.onclick = ()=>{
-      if (!isAdmin) return;
-      if (confirm(date + " 삭제?")) {
-        history[date] = (history[date]||[]).filter(r=>r.name!==selectedStudent);
-        let s = students.find(x=>x.name===selectedStudent);
-        if (s) s.count++;
-        save();
-      }
-    };
 
     cal.appendChild(div);
   }
@@ -281,36 +299,7 @@ function nextMonth() {
   drawCalendar();
 }
 
-// 🔥 바깥 클릭 닫기
-document.getElementById("calendarWrap").addEventListener("click", function(e){
-  if (e.target.id === "calendarWrap") {
-    this.style.display = "none";
-  }
-});
-
-function render() {
-  const list = document.getElementById("list");
-  list.innerHTML = "";
-
-  filtered().forEach((s,i)=>{
-    const realIndex = students.indexOf(s);
-
-    const div = document.createElement("div");
-    div.className = "student";
-
-    div.innerHTML = `
-      <div onclick="showCalendar('${s.name}')">
-        ${s.name} (${s.count})
-      </div>
-      <div>
-        <button onclick="attend(${realIndex}, this)">출석</button>
-        ${isAdmin ? `<button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>` : ""}
-      </div>
-    `;
-
-    list.appendChild(div);
-  });
-}
+render();
 </script>
 
 </body>
