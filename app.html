@@ -40,7 +40,6 @@ input {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  transition: transform 0.1s;
 }
 
 button {
@@ -62,36 +61,43 @@ button {
   font-size:12px;
 }
 
-/* 🔥 클릭 애니메이션 */
-.click {
-  transform: scale(0.95);
-}
-
-/* ✨ 팡 효과 */
-.pop {
+/* 📅 달력 모달 */
+#calendarWrap {
   position:fixed;
-  font-size:30px;
-  animation: pop 0.6s ease-out forwards;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.4);
+  display:none;
+  justify-content:center;
+  align-items:center;
 }
 
-@keyframes pop {
-  0% { transform: scale(0.5); opacity:1; }
-  100% { transform: scale(1.5); opacity:0; }
+.calendarBox {
+  background:white;
+  padding:20px;
+  border-radius:16px;
+  width:90%;
+  max-width:500px;
 }
 
-/* 📅 달력 */
+.calendarHeader {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:10px;
+}
+
 .calendar {
   display:grid;
   grid-template-columns: repeat(7,1fr);
   gap:8px;
-  padding:10px;
 }
 
 .day {
-  background:white;
-  padding:15px;
-  border-radius:10px;
+  padding:12px;
   text-align:center;
+  border-radius:8px;
+  background:#eee;
 }
 
 .active {
@@ -117,9 +123,20 @@ button {
 </div>
 
 <div id="list"></div>
-<div id="calendar"></div>
 
 <button class="admin" onclick="toggleAdmin()">관리자</button>
+
+<!-- 📅 달력 -->
+<div id="calendarWrap">
+  <div class="calendarBox" id="calendarBox">
+    <div class="calendarHeader">
+      <button onclick="prevMonth()">◀</button>
+      <div id="monthTitle"></div>
+      <button onclick="nextMonth()">▶</button>
+    </div>
+    <div id="calendar"></div>
+  </div>
+</div>
 
 <audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
 
@@ -140,6 +157,9 @@ const db = firebase.database();
 let students = [];
 let history = {};
 let isAdmin = false;
+
+let selectedStudent = null;
+let currentDate = new Date();
 
 db.ref("data").on("value", snap => {
   const val = snap.val() || {};
@@ -165,7 +185,6 @@ function toggleAdmin() {
   if (pw === "1234") {
     isAdmin = !isAdmin;
     document.getElementById("adminPanel").style.display = isAdmin ? "flex" : "none";
-    render();
   }
 }
 
@@ -185,23 +204,12 @@ function deleteStudent(i) {
 function attend(i, el) {
   if (students[i].count <= 0) return;
 
-  // 🔊 소리
   const sound = document.getElementById("sound");
   sound.currentTime = 0;
   sound.play().catch(()=>{});
 
-  // 🔥 버튼 애니메이션
-  el.classList.add("click");
-  setTimeout(()=>el.classList.remove("click"),100);
-
-  // ✨ 팡 효과
-  const pop = document.createElement("div");
-  pop.className = "pop";
-  pop.innerText = "✨";
-  pop.style.left = event.clientX + "px";
-  pop.style.top = event.clientY + "px";
-  document.body.appendChild(pop);
-  setTimeout(()=>pop.remove(),600);
+  el.style.transform="scale(0.9)";
+  setTimeout(()=>el.style.transform="scale(1)",100);
 
   const name = students[i].name;
   const date = today();
@@ -219,13 +227,25 @@ function filtered() {
 }
 
 function showCalendar(name) {
+  selectedStudent = name;
+  document.getElementById("calendarWrap").style.display = "flex";
+  drawCalendar();
+}
+
+function drawCalendar() {
   const cal = document.getElementById("calendar");
-  cal.innerHTML = "<div class='calendar'></div>";
+  cal.innerHTML = "";
+  
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
 
-  const container = cal.querySelector(".calendar");
+  document.getElementById("monthTitle").innerText =
+    year + "년 " + (month+1) + "월";
 
-  for (let i=1; i<=31; i++) {
-    const date = "2026-03-" + String(i).padStart(2,"0");
+  const lastDay = new Date(year, month+1, 0).getDate();
+
+  for (let i=1;i<=lastDay;i++) {
+    const date = year + "-" + String(month+1).padStart(2,"0") + "-" + String(i).padStart(2,"0");
 
     const div = document.createElement("div");
     div.className = "day";
@@ -233,24 +253,40 @@ function showCalendar(name) {
 
     if (history[date]) {
       history[date].forEach(r=>{
-        if (r.name === name) div.classList.add("active");
+        if (r.name === selectedStudent) div.classList.add("active");
       });
     }
 
     div.onclick = ()=>{
       if (!isAdmin) return;
-
       if (confirm(date + " 삭제?")) {
-        history[date] = (history[date]||[]).filter(r=>r.name!==name);
-        let s = students.find(x=>x.name===name);
+        history[date] = (history[date]||[]).filter(r=>r.name!==selectedStudent);
+        let s = students.find(x=>x.name===selectedStudent);
         if (s) s.count++;
         save();
       }
     };
 
-    container.appendChild(div);
+    cal.appendChild(div);
   }
 }
+
+function prevMonth() {
+  currentDate.setMonth(currentDate.getMonth()-1);
+  drawCalendar();
+}
+
+function nextMonth() {
+  currentDate.setMonth(currentDate.getMonth()+1);
+  drawCalendar();
+}
+
+// 🔥 바깥 클릭 닫기
+document.getElementById("calendarWrap").addEventListener("click", function(e){
+  if (e.target.id === "calendarWrap") {
+    this.style.display = "none";
+  }
+});
 
 function render() {
   const list = document.getElementById("list");
