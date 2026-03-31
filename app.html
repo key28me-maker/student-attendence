@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>출석 체크</title>
+
+<style>
+body {
+  margin:0;
+  font-family:sans-serif;
+  background: linear-gradient(135deg, #eef2f7, #dfe9f3);
+}
+
+.student {
+  background:white;
+  margin:10px;
+  padding:15px;
+  border-radius:12px;
+  display:flex;
+  justify-content:space-between;
+}
+
+button {
+  background:#4CAF50;
+  color:white;
+  border:none;
+  padding:10px;
+  border-radius:8px;
+}
+</style>
+</head>
+
+<body>
+
+<h2 style="text-align:center;">출석 체크</h2>
+<div id="list"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
+  authDomain: "student-attendence-e9f58.firebaseapp.com",
+  databaseURL: "https://student-attendence-e9f58-default-rtdb.firebaseio.com",
+  projectId: "student-attendence-e9f58"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let students = [];
+
+db.ref("students").on("value", snap => {
+  students = snap.val() || [];
+  render();
+});
+
+function save() {
+  db.ref("students").set(students);
+}
+
+function attend(i) {
+  if (students[i].count <= 0) return;
+  students[i].count--;
+  save();
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  students.forEach((s,i)=>{
+    const div = document.createElement("div");
+    div.className = "student";
+
+    div.innerHTML = `
+      <div>${s.name} (${s.count})</div>
+      <button onclick="attend(${i})">출석</button>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+// 초기 데이터 없으면 생성
+setTimeout(()=>{
+  if (students.length === 0) {
+    students = [
+      {name:"학생1", count:10},
+      {name:"학생2", count:10}
+    ];
+    save();
+  }
+}, 1000);
+</script>
+
+</body>
+</html>
