@@ -134,6 +134,7 @@ button {
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
+// Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
   authDomain: "student-attendence-e9f58.firebaseapp.com",
@@ -144,18 +145,19 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// 데이터
 let students = [];
 let history = {};
 let isAdmin = false;
 let selectedStudent = null;
 let currentDate = new Date();
 
-// 🔥 캐시 무시하고 소리 강제 로드
-function playSound(){
-  const sound = new Audio("https://actions.google.com/sounds/v1/alarms/doorbell.ogg?v=" + Date.now());
-  sound.play().catch(()=>{});
-}
+// 🔥 소리 (핵심)
+const sound = new Audio("https://actions.google.com/sounds/v1/alarms/doorbell.ogg");
+sound.preload = "auto";
+sound.volume = 0.7;
 
+// Firebase 실시간
 db.ref("data").on("value", (snap) => {
   const val = snap.val();
   if (val) {
@@ -169,6 +171,7 @@ function save(){
   db.ref("data").set({ students, history });
 }
 
+// 관리자
 function toggleAdmin(){
   const pw = prompt("비밀번호");
   if(pw==="1234"){
@@ -178,6 +181,7 @@ function toggleAdmin(){
   }
 }
 
+// 학생 추가
 function addStudent(){
   const name = document.getElementById("nameInput").value.trim();
   if(!name) return;
@@ -185,6 +189,7 @@ function addStudent(){
   save();
 }
 
+// 출석
 function attend(i){
   if(students[i].count<=0) return alert("횟수 없음");
 
@@ -194,17 +199,21 @@ function attend(i){
   history[date].push({name:students[i].name});
   students[i].count--;
 
-  playSound(); // 🔥 여기 핵심
+  // 🔥 소리 실행 (핵심)
+  sound.currentTime = 0;
+  sound.play().catch(()=>{});
 
   save();
 }
 
+// 삭제
 function deleteStudent(i){
   if(!confirm("삭제?")) return;
   students.splice(i,1);
   save();
 }
 
+// 횟수 수정
 function changeCount(i){
   const v = prompt("새 횟수", students[i].count);
   if(v===null) return;
@@ -214,6 +223,7 @@ function changeCount(i){
   save();
 }
 
+// 화면
 function render(){
   const list = document.getElementById("list");
   list.innerHTML="";
