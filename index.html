@@ -205,6 +205,7 @@ function render(){
   const q = document.getElementById("search").value.toLowerCase();
 
   students.filter(s=>s.name.toLowerCase().includes(q))
+  sort((a,b)=>a.name.localeCompare(b.name))
   .forEach((s,i)=>{
     const realIndex = students.indexOf(s);
 
