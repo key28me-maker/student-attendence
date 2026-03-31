@@ -51,33 +51,27 @@ button {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  transition:0.3s;
 }
 
 .delete { background:red; }
 
-/* ✨ 반짝 애니메이션 */
+/* ✨ 반짝 */
 @keyframes glow {
-  0% { box-shadow: 0 0 0px #fff; }
-  50% { box-shadow: 0 0 25px #ffffff, 0 0 40px #ffffff; }
-  100% { box-shadow: 0 0 0px #fff; }
+  0% { box-shadow:0 0 0px #fff; }
+  50% { box-shadow:0 0 25px #fff; }
+  100% { box-shadow:0 0 0px #fff; }
 }
-
-.flash {
-  animation: glow 1s ease-in-out infinite;
-}
+.flash { animation: glow 1s infinite; }
 
 /* 달력 */
 .calendarModal {
   position:fixed;
-  top:0; left:0;
   width:100%; height:100%;
   background:rgba(0,0,0,0.5);
   display:none;
   justify-content:center;
   align-items:center;
 }
-
 .calendarBox {
   background:white;
   padding:20px;
@@ -85,27 +79,8 @@ button {
   width:90%;
   max-width:500px;
 }
-
-.calendarHeader {
-  display:flex;
-  justify-content:space-between;
-  margin-bottom:10px;
-}
-
-.calendar {
-  display:grid;
-  grid-template-columns: repeat(7,1fr);
-  gap:8px;
-}
-
-.day {
-  padding:10px;
-  text-align:center;
-  background:#eee;
-  border-radius:8px;
-}
-
-.active { background:#4caf50; color:white; }
+.calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+.day { padding:10px; text-align:center; background:#eee; border-radius:8px; }
 .today { border:3px solid #5f9578; }
 .sunday { color:#e881c6; }
 .saturday { color:#82d3e8; }
@@ -129,17 +104,8 @@ button {
 
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<!-- 달력 -->
-<div class="calendarModal" id="calendarModal" onclick="closeCalendar(event)">
-  <div class="calendarBox">
-    <div class="calendarHeader">
-      <button onclick="prevMonth()">◀</button>
-      <div id="monthTitle"></div>
-      <button onclick="nextMonth()">▶</button>
-    </div>
-    <div class="calendar" id="calendar"></div>
-  </div>
-</div>
+<!-- 🔊 오디오 직접 삽입 -->
+<audio id="dingSound" src="dingdong.mp3" preload="auto"></audio>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
@@ -159,15 +125,10 @@ const db = firebase.database();
 let students = [];
 let history = {};
 let isAdmin = false;
-let selectedStudent = null;
+let lastClicked = null;
 let currentDate = new Date();
 
-// 🔊 소리
-const sound = new Audio("https://actions.google.com/sounds/v1/alarms/doorbell.ogg");
-sound.preload = "auto";
-
-// 🔥 마지막 클릭된 학생 (애니메이션용)
-let lastClicked = null;
+const sound = document.getElementById("dingSound");
 
 // Firebase
 db.ref("data").on("value", (snap) => {
@@ -208,20 +169,18 @@ function attend(i){
   history[date].push({name:students[i].name});
   students[i].count--;
 
-  // 🔊 소리
+  // 🔊 소리 (확실하게)
   sound.currentTime = 0;
   sound.play().catch(()=>{});
 
-  // ✨ 애니메이션 대상 저장
   lastClicked = students[i].name;
 
   save();
 
-  // 3초 후 애니메이션 제거
   setTimeout(()=>{
     lastClicked = null;
     render();
-  }, 3000);
+  },3000);
 }
 
 function deleteStudent(i){
@@ -252,15 +211,10 @@ function render(){
     const div = document.createElement("div");
     div.className="student";
 
-    // ✨ 애니메이션 적용
-    if(s.name === lastClicked){
-      div.classList.add("flash");
-    }
+    if(s.name===lastClicked) div.classList.add("flash");
 
     div.innerHTML=`
-      <div onclick="openCalendar('${s.name}')">
-        ${s.name} (남은:${s.count})
-      </div>
+      <div>${s.name} (남은:${s.count})</div>
       <div>
         <button onclick="attend(${realIndex})">출석</button>
         ${isAdmin?`
@@ -273,72 +227,6 @@ function render(){
     list.appendChild(div);
   });
 }
-
-/* 달력 */
-function openCalendar(name){
-  selectedStudent=name;
-  document.getElementById("calendarModal").style.display="flex";
-  drawCalendar();
-}
-
-function closeCalendar(e){
-  if(e.target.id==="calendarModal"){
-    document.getElementById("calendarModal").style.display="none";
-  }
-}
-
-function drawCalendar(){
-  const cal = document.getElementById("calendar");
-  cal.innerHTML="";
-
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const today = new Date().toISOString().split("T")[0];
-
-  document.getElementById("monthTitle").innerText =
-    year+"년 "+(month+1)+"월";
-
-  const firstDay = new Date(year,month,1).getDay();
-  const lastDay = new Date(year,month+1,0).getDate();
-
-  const days=["일","월","화","수","목","금","토"];
-  days.forEach((d,i)=>{
-    const div=document.createElement("div");
-    div.innerText=d;
-    if(i===0) div.classList.add("sunday");
-    if(i===6) div.classList.add("saturday");
-    cal.appendChild(div);
-  });
-
-  for(let i=0;i<firstDay;i++){
-    cal.appendChild(document.createElement("div"));
-  }
-
-  for(let i=1;i<=lastDay;i++){
-    const date = year+"-"+String(month+1).padStart(2,"0")+"-"+String(i).padStart(2,"0");
-
-    const div=document.createElement("div");
-    div.className="day";
-    div.innerText=i;
-
-    const day=new Date(year,month,i).getDay();
-    if(day===0) div.classList.add("sunday");
-    if(day===6) div.classList.add("saturday");
-
-    if(date===today) div.classList.add("today");
-
-    if(history[date]){
-      history[date].forEach(r=>{
-        if(r.name===selectedStudent) div.classList.add("active");
-      });
-    }
-
-    cal.appendChild(div);
-  }
-}
-
-function prevMonth(){ currentDate.setMonth(currentDate.getMonth()-1); drawCalendar();}
-function nextMonth(){ currentDate.setMonth(currentDate.getMonth()+1); drawCalendar();}
 
 </script>
 
