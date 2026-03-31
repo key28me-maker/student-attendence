@@ -12,6 +12,11 @@ body {
   background: linear-gradient(135deg, #eef2f7, #dfe9f3);
 }
 
+.header {
+  text-align:center;
+  padding:20px;
+}
+
 .student {
   background:white;
   margin:10px;
@@ -28,13 +33,26 @@ button {
   padding:10px;
   border-radius:8px;
 }
+
+.admin {
+  position:fixed;
+  bottom:10px;
+  right:10px;
+  background:#333;
+  font-size:12px;
+}
 </style>
 </head>
 
 <body>
 
-<h2 style="text-align:center;">출석 체크</h2>
+<div class="header">
+  <h2>출석 체크</h2>
+</div>
+
 <div id="list"></div>
+
+<button class="admin" onclick="toggleAdmin()">관리자</button>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
@@ -52,20 +70,79 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 let students = [];
+let history = {};
+let isAdmin = false;
 
-db.ref("students").on("value", snap => {
-  students = snap.val() || [];
+db.ref("data").on("value", snap => {
+  const val = snap.val() || {};
+  students = val.students || [];
+  history = val.history || {};
   render();
 });
 
 function save() {
-  db.ref("students").set(students);
+  db.ref("data").set({ students, history });
+}
+
+function today() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function nowTime() {
+  return new Date().toLocaleTimeString();
+}
+
+function toggleAdmin() {
+  const pw = prompt("비밀번호");
+  if (pw === "1234") isAdmin = !isAdmin;
 }
 
 function attend(i) {
   if (students[i].count <= 0) return;
+
+  const name = students[i].name;
+  const date = today();
+
+  if (!history[date]) history[date] = [];
+  history[date].push({ name, time: nowTime() });
+
   students[i].count--;
   save();
+}
+
+function showLogs(name) {
+  if (!isAdmin) return;
+
+  let msg = name + "\\n\\n";
+
+  Object.keys(history).forEach(date => {
+    history[date].forEach(r => {
+      if (r.name === name) {
+        msg += date + " " + r.time + "\\n";
+      }
+    });
+  });
+
+  let action = prompt(msg + "\\n1: 날짜삭제 / 2: 횟수수정");
+
+  if (action === "1") {
+    let d = prompt("날짜 입력 (2026-03-30)");
+    if (history[d]) {
+      history[d] = history[d].filter(r => r.name !== name);
+      let s = students.find(x=>x.name===name);
+      if (s) s.count++;
+      save();
+    }
+  }
+
+  if (action === "2") {
+    let s = students.find(x=>x.name===name);
+    let v = prompt("새 횟수", s.count);
+    if (v!==null) {
+      s.count = Number(v);
+      save();
+    }
+  }
 }
 
 function render() {
@@ -77,7 +154,9 @@ function render() {
     div.className = "student";
 
     div.innerHTML = `
-      <div>${s.name} (${s.count})</div>
+      <div onclick="showLogs('${s.name}')">
+        ${s.name} (${s.count})
+      </div>
       <button onclick="attend(${i})">출석</button>
     `;
 
@@ -85,7 +164,7 @@ function render() {
   });
 }
 
-// 초기 데이터 없으면 생성
+// 초기 데이터
 setTimeout(()=>{
   if (students.length === 0) {
     students = [
