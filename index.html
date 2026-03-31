@@ -3,231 +3,270 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-
-<title>Your Art Studio</title>
+<title>출석 체크</title>
 
 <style>
 body {
-  margin:0;
   font-family: sans-serif;
-  background: linear-gradient(135deg, #eef2f7, #dfe9f3);
+  background:#c1e5d2;
+  padding:20px;
+  font-size:20px;
 }
 
-.header {
-  background: #111;
-  color: white;
-  text-align: center;
-  padding: 25px;
+h1 { text-align:center; }
+
+.top {
+  display:flex;
+  gap:10px;
+  margin-bottom:10px;
 }
 
-.search { padding:15px; }
-.search input {
-  width:100%;
-  padding:15px;
-  font-size:18px;
-  border-radius:12px;
+input {
+  flex:1;
+  padding:14px;
+  font-size:20px;
+}
+
+button {
+  padding:14px;
   border:none;
+  border-radius:10px;
+  background:#2e7d32;
+  color:white;
+  font-size:20px;
+}
+
+.adminBtn {
+  position:fixed;
+  bottom:10px;
+  right:10px;
+  background:#333;
 }
 
 .student {
   background:white;
-  margin:12px;
-  padding:20px;
-  border-radius:18px;
+  padding:18px;
+  margin-bottom:10px;
+  border-radius:12px;
   display:flex;
   justify-content:space-between;
   align-items:center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
-.name { font-size:20px; font-weight:bold; }
-.count { font-size:14px; color:#666; }
+.delete { background:red; }
 
-.attend-btn {
-  background:#4CAF50;
-  font-size:18px;
-  padding:15px 22px;
-  border-radius:12px;
-  border:none;
-  color:white;
-}
-
-.admin-btn {
-  position: fixed;
-  bottom: 10px;
-  right: 10px;
-  background: #333;
-  font-size: 12px;
-  padding: 8px;
-  opacity: 0.2;
-}
-
-.admin-panel {
+/* 달력 */
+.calendarModal {
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
   display:none;
-  padding:10px;
+  justify-content:center;
+  align-items:center;
 }
+
+.calendarBox {
+  background:white;
+  padding:20px;
+  border-radius:15px;
+  width:90%;
+  max-width:500px;
+}
+
+.calendar {
+  display:grid;
+  grid-template-columns: repeat(7,1fr);
+  gap:8px;
+}
+
+.day {
+  padding:10px;
+  text-align:center;
+  background:#eee;
+  border-radius:8px;
+}
+
+.active { background:#4caf50; color:white; }
+.today { border:3px solid #5f9578; }
+.sunday { color:#e881c6; }
+.saturday { color:#82d3e8; }
 </style>
 </head>
 
 <body>
 
-<div class="header">
-  <h1>Your Art Studio</h1>
-  <p>출석 체크</p>
-</div>
+<h1>출석 체크</h1>
 
-<div class="search">
+<div class="top">
   <input id="search" placeholder="이름 검색" oninput="render()">
 </div>
 
-<div id="list"></div>
-
-<button class="admin-btn" onclick="toggleAdmin()">관리자</button>
-
-<div class="admin-panel" id="adminPanel">
+<div class="top" id="adminPanel" style="display:none;">
   <input id="nameInput" placeholder="학생 이름">
   <button onclick="addStudent()">추가</button>
 </div>
 
-<audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
+<div id="list"></div>
 
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<button class="adminBtn" onclick="toggleAdmin()">관리자</button>
+
+<!-- 달력 -->
+<div class="calendarModal" id="calendarModal" onclick="closeCalendar(event)">
+  <div class="calendarBox">
+    <div style="display:flex;justify-content:space-between;">
+      <button onclick="prevMonth()">◀</button>
+      <div id="monthTitle"></div>
+      <button onclick="nextMonth()">▶</button>
+    </div>
+    <div class="calendar" id="calendar"></div>
+  </div>
+</div>
 
 <script>
-let students = [];
-let history = {};
+let students = JSON.parse(localStorage.getItem("students")) || [];
+let history = JSON.parse(localStorage.getItem("history")) || {};
 let isAdmin = false;
-let db;
+let selectedStudent = null;
+let currentDate = new Date();
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
-  authDomain: "student-attendence-e9f58.firebaseapp.com",
-  databaseURL: "https://student-attendence-e9f58-default-rtdb.firebaseio.com",
-  projectId: "student-attendence-e9f58"
-};
+const sound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
 
-firebase.initializeApp(firebaseConfig);
-db = firebase.database();
-
-db.ref("data").on("value", (snap) => {
-  const val = snap.val();
-  if (val) {
-    students = val.students || [];
-    history = val.history || {};
-    render();
-  }
-});
-
-function save() {
-  db.ref("data").set({ students, history });
+function save(){
+  localStorage.setItem("students", JSON.stringify(students));
+  localStorage.setItem("history", JSON.stringify(history));
 }
 
-function today() {
-  return new Date().toISOString().split("T")[0];
-}
-function nowTime() {
-  return new Date().toLocaleTimeString();
-}
-
-function toggleAdmin() {
+function toggleAdmin(){
   const pw = prompt("비밀번호");
-  if (pw === "1234") {
+  if(pw==="1234"){
     isAdmin = !isAdmin;
-    document.getElementById("adminPanel").style.display = isAdmin ? "block" : "none";
+    document.getElementById("adminPanel").style.display = isAdmin?"flex":"none";
     render();
   }
 }
 
-function addStudent() {
+function addStudent(){
   const name = document.getElementById("nameInput").value.trim();
-  if (!name) return;
-  students.push({ name, count: 10 });
-  save();
-  render();
+  if(!name) return;
+  students.push({name, count:10});
+  save(); render();
 }
 
-function attend(i) {
-  if (students[i].count <= 0) return;
+function attend(i){
+  if(students[i].count<=0) return alert("횟수 없음");
 
-  document.getElementById("sound").play();
+  const date = new Date().toISOString().split("T")[0];
+  if(!history[date]) history[date]=[];
 
-  const name = students[i].name;
-  const date = today();
-
-  if (!history[date]) history[date] = [];
-  history[date].push({ name, time: nowTime() });
+  history[date].push({name:students[i].name});
 
   students[i].count--;
-  save();
-  render();
+
+  sound.currentTime=0;
+  sound.play();
+
+  save(); render();
 }
 
-// 🔥 출석 삭제 + 횟수 수정
-function showLogs(name) {
-  if (!isAdmin) return;
-
-  let msg = name + " 기록\n\n";
-
-  Object.keys(history).forEach(date => {
-    history[date].forEach(r => {
-      if (r.name === name) {
-        msg += date + " " + r.time + "\n";
-      }
-    });
-  });
-
-  let action = prompt(msg + "\n1: 날짜삭제 / 2: 횟수수정");
-
-  if (action === "1") {
-    let d = prompt("삭제 날짜 입력 (예: 2026-03-30)");
-    if (history[d]) {
-      history[d] = history[d].filter(r => r.name !== name);
-      let s = students.find(x=>x.name===name);
-      if (s) s.count++;
-      save(); render();
-    }
-  }
-
-  if (action === "2") {
-    let s = students.find(x=>x.name===name);
-    let v = prompt("새 횟수", s.count);
-    if (v!==null) {
-      s.count = Number(v);
-      save(); render();
-    }
-  }
+function deleteStudent(i){
+  if(!confirm("삭제?")) return;
+  students.splice(i,1);
+  save(); render();
 }
 
-function filteredStudents() {
-  const q = document.getElementById("search").value.toLowerCase();
-  return students.filter(s => s.name.toLowerCase().includes(q));
-}
-
-function render() {
+function render(){
   const list = document.getElementById("list");
-  list.innerHTML = "";
+  list.innerHTML="";
 
-  filteredStudents().forEach((s,i)=>{
+  const q = document.getElementById("search").value.toLowerCase();
+
+  students.filter(s=>s.name.toLowerCase().includes(q))
+  .forEach((s,i)=>{
     const realIndex = students.indexOf(s);
 
     const div = document.createElement("div");
-    div.className = "student";
+    div.className="student";
 
-    div.innerHTML = `
-      <div onclick="showLogs('${s.name}')">
-        <div class="name">${s.name}</div>
-        <div class="count">남은 ${s.count}회</div>
+    div.innerHTML=`
+      <div onclick="openCalendar('${s.name}')">
+        ${s.name}<br>남은횟수: ${s.count}
       </div>
-      <button class="attend-btn" onclick="attend(${realIndex})">출석</button>
+      <div>
+        <button onclick="attend(${realIndex})">출석</button>
+        ${isAdmin?`<button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>`:""}
+      </div>
     `;
 
     list.appendChild(div);
   });
 }
+
+/* 달력 */
+function openCalendar(name){
+  selectedStudent=name;
+  document.getElementById("calendarModal").style.display="flex";
+  drawCalendar();
+}
+
+function closeCalendar(e){
+  if(e.target.id==="calendarModal"){
+    document.getElementById("calendarModal").style.display="none";
+  }
+}
+
+function drawCalendar(){
+  const cal = document.getElementById("calendar");
+  cal.innerHTML="";
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const today = new Date().toISOString().split("T")[0];
+
+  document.getElementById("monthTitle").innerText =
+    year+"년 "+(month+1)+"월";
+
+  const firstDay = new Date(year,month,1).getDay();
+  const lastDay = new Date(year,month+1,0).getDate();
+
+  const days=["일","월","화","수","목","금","토"];
+  days.forEach((d,i)=>{
+    const div=document.createElement("div");
+    div.innerText=d;
+    if(i===0) div.classList.add("sunday");
+    if(i===6) div.classList.add("saturday");
+    cal.appendChild(div);
+  });
+
+  for(let i=0;i<firstDay;i++){
+    cal.appendChild(document.createElement("div"));
+  }
+
+  for(let i=1;i<=lastDay;i++){
+    const date = year+"-"+String(month+1).padStart(2,"0")+"-"+String(i).padStart(2,"0");
+
+    const div=document.createElement("div");
+    div.className="day";
+    div.innerText=i;
+
+    const day=new Date(year,month,i).getDay();
+    if(day===0) div.classList.add("sunday");
+    if(day===6) div.classList.add("saturday");
+
+    if(date===today) div.classList.add("today");
+
+    if(history[date]){
+      history[date].forEach(r=>{
+        if(r.name===selectedStudent) div.classList.add("active");
+      });
+    }
+
+    cal.appendChild(div);
+  }
+}
+
+function prevMonth(){ currentDate.setMonth(currentDate.getMonth()-1); drawCalendar();}
+function nextMonth(){ currentDate.setMonth(currentDate.getMonth()+1); drawCalendar();}
 
 render();
 </script>
