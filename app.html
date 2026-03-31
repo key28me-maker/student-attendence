@@ -9,7 +9,8 @@
 body {
   margin:0;
   font-family:sans-serif;
-  background: linear-gradient(135deg, #eef2f7, #dfe9f3);
+  background:#c1e5d2;
+  font-size:20px;
 }
 
 .header {
@@ -25,32 +26,33 @@ body {
 
 input {
   flex:1;
-  padding:10px;
-  border-radius:8px;
+  padding:16px;
+  font-size:18px;
+  border-radius:10px;
   border:none;
 }
 
 .student {
   background:white;
-  margin:10px;
-  padding:15px;
-  border-radius:12px;
+  margin:20px;
+  padding:25px;
+  border-radius:16px;
   display:flex;
   justify-content:space-between;
   align-items:center;
+  transition: transform 0.1s;
 }
 
 button {
   background:#4CAF50;
   color:white;
   border:none;
-  padding:10px;
-  border-radius:8px;
+  padding:16px;
+  font-size:18px;
+  border-radius:12px;
 }
 
-.delete {
-  background:red;
-}
+.delete { background:red; }
 
 .admin {
   position:fixed;
@@ -58,6 +60,43 @@ button {
   right:10px;
   background:#333;
   font-size:12px;
+}
+
+/* 🔥 클릭 애니메이션 */
+.click {
+  transform: scale(0.95);
+}
+
+/* ✨ 팡 효과 */
+.pop {
+  position:fixed;
+  font-size:30px;
+  animation: pop 0.6s ease-out forwards;
+}
+
+@keyframes pop {
+  0% { transform: scale(0.5); opacity:1; }
+  100% { transform: scale(1.5); opacity:0; }
+}
+
+/* 📅 달력 */
+.calendar {
+  display:grid;
+  grid-template-columns: repeat(7,1fr);
+  gap:8px;
+  padding:10px;
+}
+
+.day {
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  text-align:center;
+}
+
+.active {
+  background:#4CAF50;
+  color:white;
 }
 </style>
 </head>
@@ -78,13 +117,12 @@ button {
 </div>
 
 <div id="list"></div>
+<div id="calendar"></div>
 
 <button class="admin" onclick="toggleAdmin()">관리자</button>
 
-<!-- 🔊 소리 -->
 <audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
@@ -144,13 +182,26 @@ function deleteStudent(i) {
   save();
 }
 
-function attend(i) {
+function attend(i, el) {
   if (students[i].count <= 0) return;
 
   // 🔊 소리
   const sound = document.getElementById("sound");
   sound.currentTime = 0;
-  sound.play();
+  sound.play().catch(()=>{});
+
+  // 🔥 버튼 애니메이션
+  el.classList.add("click");
+  setTimeout(()=>el.classList.remove("click"),100);
+
+  // ✨ 팡 효과
+  const pop = document.createElement("div");
+  pop.className = "pop";
+  pop.innerText = "✨";
+  pop.style.left = event.clientX + "px";
+  pop.style.top = event.clientY + "px";
+  document.body.appendChild(pop);
+  setTimeout(()=>pop.remove(),600);
 
   const name = students[i].name;
   const date = today();
@@ -167,38 +218,37 @@ function filtered() {
   return students.filter(s => s.name.toLowerCase().includes(q));
 }
 
-function showLogs(name) {
-  if (!isAdmin) return;
+function showCalendar(name) {
+  const cal = document.getElementById("calendar");
+  cal.innerHTML = "<div class='calendar'></div>";
 
-  let msg = name + "\\n\\n";
+  const container = cal.querySelector(".calendar");
 
-  Object.keys(history).forEach(date => {
-    history[date].forEach(r => {
-      if (r.name === name) {
-        msg += date + " " + r.time + "\\n";
+  for (let i=1; i<=31; i++) {
+    const date = "2026-03-" + String(i).padStart(2,"0");
+
+    const div = document.createElement("div");
+    div.className = "day";
+    div.innerText = i;
+
+    if (history[date]) {
+      history[date].forEach(r=>{
+        if (r.name === name) div.classList.add("active");
+      });
+    }
+
+    div.onclick = ()=>{
+      if (!isAdmin) return;
+
+      if (confirm(date + " 삭제?")) {
+        history[date] = (history[date]||[]).filter(r=>r.name!==name);
+        let s = students.find(x=>x.name===name);
+        if (s) s.count++;
+        save();
       }
-    });
-  });
+    };
 
-  let action = prompt(msg + "\\n1: 날짜삭제 / 2: 횟수수정");
-
-  if (action === "1") {
-    let d = prompt("날짜 입력");
-    if (history[d]) {
-      history[d] = history[d].filter(r => r.name !== name);
-      let s = students.find(x=>x.name===name);
-      if (s) s.count++;
-      save();
-    }
-  }
-
-  if (action === "2") {
-    let s = students.find(x=>x.name===name);
-    let v = prompt("새 횟수", s.count);
-    if (v!==null) {
-      s.count = Number(v);
-      save();
-    }
+    container.appendChild(div);
   }
 }
 
@@ -213,11 +263,11 @@ function render() {
     div.className = "student";
 
     div.innerHTML = `
-      <div onclick="showLogs('${s.name}')">
+      <div onclick="showCalendar('${s.name}')">
         ${s.name} (${s.count})
       </div>
       <div>
-        <button onclick="attend(${realIndex})">출석</button>
+        <button onclick="attend(${realIndex}, this)">출석</button>
         ${isAdmin ? `<button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>` : ""}
       </div>
     `;
@@ -225,17 +275,6 @@ function render() {
     list.appendChild(div);
   });
 }
-
-// 초기 데이터
-setTimeout(()=>{
-  if (students.length === 0) {
-    students = [
-      {name:"학생1", count:10},
-      {name:"학생2", count:10}
-    ];
-    save();
-  }
-}, 1000);
 </script>
 
 </body>
