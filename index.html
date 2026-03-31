@@ -51,9 +51,21 @@ button {
   display:flex;
   justify-content:space-between;
   align-items:center;
+  transition:0.3s;
 }
 
 .delete { background:red; }
+
+/* ✨ 반짝 애니메이션 */
+@keyframes glow {
+  0% { box-shadow: 0 0 0px #fff; }
+  50% { box-shadow: 0 0 25px #ffffff, 0 0 40px #ffffff; }
+  100% { box-shadow: 0 0 0px #fff; }
+}
+
+.flash {
+  animation: glow 1s ease-in-out infinite;
+}
 
 /* 달력 */
 .calendarModal {
@@ -134,7 +146,6 @@ button {
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-// Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
   authDomain: "student-attendence-e9f58.firebaseapp.com",
@@ -145,19 +156,20 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 데이터
 let students = [];
 let history = {};
 let isAdmin = false;
 let selectedStudent = null;
 let currentDate = new Date();
 
-// 🔥 소리 (핵심)
+// 🔊 소리
 const sound = new Audio("https://actions.google.com/sounds/v1/alarms/doorbell.ogg");
 sound.preload = "auto";
-sound.volume = 0.7;
 
-// Firebase 실시간
+// 🔥 마지막 클릭된 학생 (애니메이션용)
+let lastClicked = null;
+
+// Firebase
 db.ref("data").on("value", (snap) => {
   const val = snap.val();
   if (val) {
@@ -171,7 +183,6 @@ function save(){
   db.ref("data").set({ students, history });
 }
 
-// 관리자
 function toggleAdmin(){
   const pw = prompt("비밀번호");
   if(pw==="1234"){
@@ -181,7 +192,6 @@ function toggleAdmin(){
   }
 }
 
-// 학생 추가
 function addStudent(){
   const name = document.getElementById("nameInput").value.trim();
   if(!name) return;
@@ -189,7 +199,6 @@ function addStudent(){
   save();
 }
 
-// 출석
 function attend(i){
   if(students[i].count<=0) return alert("횟수 없음");
 
@@ -199,21 +208,28 @@ function attend(i){
   history[date].push({name:students[i].name});
   students[i].count--;
 
-  // 🔥 소리 실행 (핵심)
+  // 🔊 소리
   sound.currentTime = 0;
   sound.play().catch(()=>{});
 
+  // ✨ 애니메이션 대상 저장
+  lastClicked = students[i].name;
+
   save();
+
+  // 3초 후 애니메이션 제거
+  setTimeout(()=>{
+    lastClicked = null;
+    render();
+  }, 3000);
 }
 
-// 삭제
 function deleteStudent(i){
   if(!confirm("삭제?")) return;
   students.splice(i,1);
   save();
 }
 
-// 횟수 수정
 function changeCount(i){
   const v = prompt("새 횟수", students[i].count);
   if(v===null) return;
@@ -223,7 +239,6 @@ function changeCount(i){
   save();
 }
 
-// 화면
 function render(){
   const list = document.getElementById("list");
   list.innerHTML="";
@@ -236,6 +251,11 @@ function render(){
 
     const div = document.createElement("div");
     div.className="student";
+
+    // ✨ 애니메이션 적용
+    if(s.name === lastClicked){
+      div.classList.add("flash");
+    }
 
     div.innerHTML=`
       <div onclick="openCalendar('${s.name}')">
