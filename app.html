@@ -17,6 +17,19 @@ body {
   padding:20px;
 }
 
+.top {
+  display:flex;
+  gap:10px;
+  padding:10px;
+}
+
+input {
+  flex:1;
+  padding:10px;
+  border-radius:8px;
+  border:none;
+}
+
 .student {
   background:white;
   margin:10px;
@@ -24,6 +37,7 @@ body {
   border-radius:12px;
   display:flex;
   justify-content:space-between;
+  align-items:center;
 }
 
 button {
@@ -32,6 +46,10 @@ button {
   border:none;
   padding:10px;
   border-radius:8px;
+}
+
+.delete {
+  background:red;
 }
 
 .admin {
@@ -50,9 +68,21 @@ button {
   <h2>출석 체크</h2>
 </div>
 
+<div class="top">
+  <input id="search" placeholder="이름 검색" oninput="render()">
+</div>
+
+<div class="top" id="adminPanel" style="display:none;">
+  <input id="nameInput" placeholder="학생 이름">
+  <button onclick="addStudent()">추가</button>
+</div>
+
 <div id="list"></div>
 
 <button class="admin" onclick="toggleAdmin()">관리자</button>
+
+<!-- 🔊 소리 -->
+<audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b8b6f.mp3"></audio>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
@@ -94,11 +124,33 @@ function nowTime() {
 
 function toggleAdmin() {
   const pw = prompt("비밀번호");
-  if (pw === "1234") isAdmin = !isAdmin;
+  if (pw === "1234") {
+    isAdmin = !isAdmin;
+    document.getElementById("adminPanel").style.display = isAdmin ? "flex" : "none";
+    render();
+  }
+}
+
+function addStudent() {
+  const name = document.getElementById("nameInput").value.trim();
+  if (!name) return;
+  students.push({ name, count: 10 });
+  save();
+}
+
+function deleteStudent(i) {
+  if (!confirm("삭제?")) return;
+  students.splice(i,1);
+  save();
 }
 
 function attend(i) {
   if (students[i].count <= 0) return;
+
+  // 🔊 소리
+  const sound = document.getElementById("sound");
+  sound.currentTime = 0;
+  sound.play();
 
   const name = students[i].name;
   const date = today();
@@ -108,6 +160,11 @@ function attend(i) {
 
   students[i].count--;
   save();
+}
+
+function filtered() {
+  const q = document.getElementById("search").value.toLowerCase();
+  return students.filter(s => s.name.toLowerCase().includes(q));
 }
 
 function showLogs(name) {
@@ -126,7 +183,7 @@ function showLogs(name) {
   let action = prompt(msg + "\\n1: 날짜삭제 / 2: 횟수수정");
 
   if (action === "1") {
-    let d = prompt("날짜 입력 (2026-03-30)");
+    let d = prompt("날짜 입력");
     if (history[d]) {
       history[d] = history[d].filter(r => r.name !== name);
       let s = students.find(x=>x.name===name);
@@ -149,7 +206,9 @@ function render() {
   const list = document.getElementById("list");
   list.innerHTML = "";
 
-  students.forEach((s,i)=>{
+  filtered().forEach((s,i)=>{
+    const realIndex = students.indexOf(s);
+
     const div = document.createElement("div");
     div.className = "student";
 
@@ -157,7 +216,10 @@ function render() {
       <div onclick="showLogs('${s.name}')">
         ${s.name} (${s.count})
       </div>
-      <button onclick="attend(${i})">출석</button>
+      <div>
+        <button onclick="attend(${realIndex})">출석</button>
+        ${isAdmin ? `<button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>` : ""}
+      </div>
     `;
 
     list.appendChild(div);
