@@ -33,8 +33,7 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 
 <div class="top" id="adminPanel" style="display:none;">
 <input id="nameInput" placeholder="학생 이름">
-<input id="phoneInput" placeholder="학생 번호">
-<input id="parentPhoneInput" placeholder="보호자 번호">
+<input id="phoneInput" placeholder="전화번호">
 <input id="periodInput" placeholder="기간(일)">
 <input id="priceInput" placeholder="수강료">
 <button onclick="addStudent()">추가</button>
@@ -85,6 +84,7 @@ db.ref("data").on("value",snap=>{
 
 function save(){db.ref("data").set({students,history,sales});}
 
+// 데이터 보정
 function normalizeStudent(s){
  if(!s.period) s.period=30;
  if(!s.startDate) s.startDate=today();
@@ -101,17 +101,17 @@ function toggleAdmin(){
  }
 }
 
+// 학생 추가
 function addStudent(){
  const name=nameInput.value.trim();
  const phone=phoneInput.value.trim();
- const parentPhone=parentPhoneInput.value.trim();
  const period=+periodInput.value;
  const price=+priceInput.value;
 
  if(!name||!phone||!period||!price) return alert("입력 부족");
 
  students.push({
-  name, phone, parentPhone,
+  name, phone,
   period, price,
   count:4,
   startDate:today(),
@@ -121,12 +121,14 @@ function addStudent(){
  save();
 }
 
+// 남은일
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
  return Math.ceil((d-new Date())/(1000*60*60*24));
 }
 
+// 출석
 function attend(i){
  history[today()]=history[today()]||[];
  history[today()].push({name:students[i].name});
@@ -134,13 +136,14 @@ function attend(i){
  save();
 }
 
-function sendSMS(s,msg,toParent=false){
- const phone = toParent && s.parentPhone ? s.parentPhone : s.phone;
- location.href=`sms:${phone}?body=${encodeURIComponent(msg)}`;
+// 문자
+function sendSMS(s,msg){
+ location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
  s.notified[today()]=true;
  save();
 }
 
+// 결제
 function resetStudent(i){
  const s=students[i];
  sales.push({name:s.name,price:s.price,date:today()});
@@ -150,7 +153,14 @@ function resetStudent(i){
  save();
 }
 
-// 🔥 핵심: 상세 + 수정 포함
+// 🔥 학생 삭제
+function deleteStudent(name){
+ if(!confirm(name+" 삭제할까?")) return;
+ students = students.filter(s=>s.name!==name);
+ save();
+}
+
+// 상세
 function showStudentDetail(name){
  if(!isAdmin) return;
 
@@ -163,6 +173,7 @@ function showStudentDetail(name){
   수강료: ${s.price.toLocaleString()}원<br><br>
 
   <button onclick="editCount('${name}')">횟수 수정</button>
+  <button onclick="deleteStudent('${name}')">삭제</button>
 
   <hr>
   <b>결제 이력</b><br>
@@ -171,16 +182,16 @@ function showStudentDetail(name){
  modal.style.display="flex";
 }
 
-// 🔥 횟수 수정
+// 횟수 수정
 function editCount(name){
  const s = students.find(x=>x.name===name);
- const v = prompt("새 횟수 입력", s.count);
+ const v = prompt("새 횟수", s.count);
  if(v===null) return;
 
  const num = Number(v);
  if(isNaN(num)) return alert("숫자만");
 
- s.count = num;
+ s.count=num;
  save();
  render();
 }
@@ -201,12 +212,7 @@ function render(){
   if(isAdmin && !s.notified[today()]){
     if(s.count<=2 || d<=3){
       const msg=`${s.name}님, ${d}일 / ${s.count}회 남았습니다.`;
-
-      btn=`
-        <button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>학생</button>
-        ${s.parentPhone?`<button onclick='sendSMS(${JSON.stringify(s)}, "${msg}", true)'>보호자</button>`:""}
-      `;
-
+      btn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>문자</button>`;
       smsList.push(s.name);
       todo.push(s.name+" 문자");
     }
