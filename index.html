@@ -6,78 +6,41 @@
 <title>출석 체크</title>
 
 <style>
-body {
-  font-family: sans-serif;
-  background:#c1e5d2;
-  padding:20px;
-  font-size:20px;
-}
+body { font-family:sans-serif; background:#c1e5d2; padding:20px; font-size:20px;}
+.top { display:flex; gap:10px; margin-bottom:10px;}
+input { flex:1; padding:14px; font-size:20px;}
+button { padding:14px; border:none; border-radius:10px; background:#f3a4b0; color:white; font-size:20px;}
+.attendBtn { padding:22px 28px; font-size:26px;}
+.adminBtn { position:fixed; bottom:10px; right:10px; background:#333;}
+.student { background:white; padding:18px; margin-bottom:10px; border-radius:12px; display:flex; justify-content:space-between;}
+.nameBox { display:flex; flex-direction:column;}
+.count { font-size:16px; color:#666;}
+.delete { background:red;}
 
-h1 { text-align:center; }
+.flash { animation: glow 1s infinite;}
+@keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 25px #fff}100%{box-shadow:0 0 0}}
 
-.top {
-  display:flex;
-  gap:10px;
-  margin-bottom:10px;
-}
-
-input {
-  flex:1;
-  padding:14px;
-  font-size:20px;
-}
-
-button {
-  padding:14px;
-  border:none;
-  border-radius:10px;
-  background:#f3a4b0;
-  color:white;
-  font-size:20px;
-}
-
-.attendBtn {
-  padding:22px 28px;
-  font-size:26px;
-}
-
-.adminBtn {
+/* 그래프 */
+.chartModal {
   position:fixed;
-  bottom:10px;
-  right:10px;
-  background:#333;
-}
-
-.student {
-  background:white;
-  padding:18px;
-  margin-bottom:10px;
-  border-radius:12px;
-  display:flex;
-  justify-content:space-between;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+  display:none;
+  justify-content:center;
   align-items:center;
 }
-
-.nameBox {
-  display:flex;
-  flex-direction:column;
+.chartBox {
+  background:white;
+  padding:20px;
+  border-radius:15px;
+  width:90%;
+  max-width:500px;
 }
-
-.count {
-  font-size:16px;
-  color:#666;
+.bar {
+  height:20px;
+  background:#f3a4b0;
+  margin:5px 0;
 }
-
-.delete { background:red; }
-
-/* 반짝 */
-@keyframes glow {
-  0% { box-shadow:0 0 0px #fff; }
-  50% { box-shadow:0 0 25px #fff; }
-  100% { box-shadow:0 0 0px #fff; }
-}
-.flash { animation: glow 1s infinite; }
-
 </style>
 </head>
 
@@ -86,166 +49,202 @@ button {
 <h1>출석 체크</h1>
 
 <div class="top">
-  <input id="search" placeholder="이름 검색" oninput="render()">
+<input id="search" placeholder="이름 검색" oninput="render()">
 </div>
 
-<!-- 관리자 -->
 <div class="top" id="adminPanel" style="display:none;">
-  <input id="nameInput" placeholder="학생 이름">
-  <button onclick="addStudent()">추가</button>
-  <button onclick="showToday()">오늘출석</button>
+<input id="nameInput" placeholder="학생 이름">
+<button onclick="addStudent()">추가</button>
+<button onclick="showToday()">오늘출석</button>
+<button onclick="pickDate()">날짜조회</button>
+<button onclick="showMonth()">월통계</button>
 </div>
 
 <div id="list"></div>
-
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<audio id="dingSound" src="dingdong.mp3" preload="auto"></audio>
+<audio id="dingSound" src="dingdong.mp3"></audio>
+
+<!-- 그래프 -->
+<div class="chartModal" id="chartModal" onclick="closeChart(event)">
+  <div class="chartBox" id="chartBox"></div>
+</div>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
 const firebaseConfig = {
-  apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
-  authDomain: "student-attendence-e9f58.firebaseapp.com",
-  databaseURL: "https://student-attendence-e9f58-default-rtdb.firebaseio.com",
-  projectId: "student-attendence-e9f58"
+  apiKey:"AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
+  authDomain:"student-attendence-e9f58.firebaseapp.com",
+  databaseURL:"https://student-attendence-e9f58-default-rtdb.firebaseio.com",
+  projectId:"student-attendence-e9f58"
 };
 
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const db=firebase.database();
 
-let students = [];
-let history = {};
-let isAdmin = false;
-let lastClicked = null;
+let students=[], history={}, isAdmin=false, lastClicked=null;
+const sound=document.getElementById("dingSound");
 
-const sound = document.getElementById("dingSound");
+function today(){ return new Date().toISOString().split("T")[0]; }
 
-function today(){
-  return new Date().toISOString().split("T")[0];
-}
-
-// Firebase
-db.ref("data").on("value", (snap) => {
-  const val = snap.val();
-  if (val) {
-    students = val.students || [];
-    history = val.history || {};
-  }
-  render();
+db.ref("data").on("value",(snap)=>{
+ const val=snap.val();
+ if(val){ students=val.students||[]; history=val.history||{};}
+ render();
 });
 
-function save(){
-  db.ref("data").set({ students, history });
-}
+function save(){ db.ref("data").set({students,history}); }
 
 function toggleAdmin(){
-  const pw = prompt("비밀번호");
-  if(pw==="1234"){
-    isAdmin = !isAdmin;
-    document.getElementById("adminPanel").style.display = isAdmin?"flex":"none";
-    render();
-  }
+ const pw=prompt("비밀번호");
+ if(pw==="1234"){
+  isAdmin=!isAdmin;
+  document.getElementById("adminPanel").style.display=isAdmin?"flex":"none";
+  render();
+ }
 }
 
 function addStudent(){
-  const name = document.getElementById("nameInput").value.trim();
-  if(!name) return;
-  students.push({name, count:10});
-  save();
+ const name=document.getElementById("nameInput").value.trim();
+ if(!name)return;
+ students.push({name,count:10});
+ save();
 }
 
-// 🔥 출석 (확인 추가)
+// 🔥 출석 (마이너스 허용)
 function attend(i){
-  const ok = confirm("출석하시려면 확인을 눌러주세요.");
-  if(!ok) return;
+ if(!confirm("출석하시려면 확인을 눌러주세요.")) return;
 
-  if(students[i].count<=0) return alert("횟수 없음");
+ const date=today();
+ if(!history[date]) history[date]=[];
 
-  const date = today();
-  if(!history[date]) history[date]=[];
+ if(history[date].some(r=>r.name===students[i].name)){
+  alert("이미 출석함");
+  return;
+ }
 
-  history[date].push({name:students[i].name});
-  students[i].count--;
+ history[date].push({name:students[i].name});
+ students[i].count--; // 🔥 마이너스 가능
 
-  sound.currentTime = 0;
-  sound.play().catch(()=>{});
+ sound.currentTime=0;
+ sound.play().catch(()=>{});
 
-  lastClicked = students[i].name;
+ lastClicked=students[i].name;
+ save();
 
-  save();
-
-  setTimeout(()=>{
-    lastClicked = null;
-    render();
-  },3000);
+ setTimeout(()=>{ lastClicked=null; render(); },3000);
 }
 
-// 🔥 오늘 출석자 보기
+// 오늘 출석 + 취소
 function showToday(){
-  const list = history[today()] || [];
-  if(list.length===0){
-    alert("오늘 출석 없음");
-    return;
-  }
+ const list=history[today()]||[];
+ if(list.length===0){ alert("없음"); return;}
 
-  const names = list.map(v=>v.name).join("\n");
-  alert("오늘 출석:\n\n" + names);
+ const names=list.map(v=>v.name).join("\n");
+ const target=prompt("출석자:\n\n"+names+"\n\n취소할 이름 입력");
+
+ if(!target) return;
+
+ history[today()]=list.filter(v=>v.name!==target);
+
+ const s=students.find(s=>s.name===target);
+ if(s) s.count++; // 복구
+
+ save();
+}
+
+// 날짜 조회
+function pickDate(){
+ const d=prompt("날짜 입력 (2026-04-08)");
+ if(!d) return;
+ const list=history[d]||[];
+ if(list.length===0){ alert("없음"); return;}
+ alert(d+" 출석:\n\n"+list.map(v=>v.name).join("\n"));
+}
+
+// 🔥 월 통계
+function showMonth(){
+ const now=new Date();
+ const month=String(now.getMonth()+1).padStart(2,"0");
+ const year=now.getFullYear();
+
+ let stats={};
+
+ for(let d in history){
+  if(d.startsWith(year+"-"+month)){
+    history[d].forEach(r=>{
+      stats[r.name]=(stats[r.name]||0)+1;
+    });
+  }
+ }
+
+ const box=document.getElementById("chartBox");
+ box.innerHTML="<h3>"+year+"-"+month+" 출석</h3>";
+
+ for(let name in stats){
+  const count=stats[name];
+  box.innerHTML+=`
+    <div>${name} (${count})</div>
+    <div class="bar" style="width:${count*20}px"></div>
+  `;
+ }
+
+ document.getElementById("chartModal").style.display="flex";
+}
+
+function closeChart(e){
+ if(e.target.id==="chartModal"){
+  document.getElementById("chartModal").style.display="none";
+ }
 }
 
 function deleteStudent(i){
-  if(!confirm("삭제?")) return;
-  students.splice(i,1);
-  save();
+ if(!confirm("삭제?")) return;
+ students.splice(i,1);
+ save();
 }
 
 function changeCount(i){
-  const v = prompt("새 횟수", students[i].count);
-  if(v===null) return;
-  const num = Number(v);
-  if(isNaN(num)) return alert("숫자 입력");
-  students[i].count = num;
-  save();
+ const v=prompt("새 횟수",students[i].count);
+ if(v===null) return;
+ const num=Number(v);
+ if(isNaN(num)) return alert("숫자 입력");
+ students[i].count=num;
+ save();
 }
 
 function render(){
-  const list = document.getElementById("list");
-  list.innerHTML="";
+ const list=document.getElementById("list");
+ list.innerHTML="";
+ const q=document.getElementById("search").value.toLowerCase();
 
-  const q = document.getElementById("search").value.toLowerCase();
+ students
+ .filter(s=>s.name.toLowerCase().includes(q))
+ .sort((a,b)=>a.name.localeCompare(b.name,'ko'))
+ .forEach((s,i)=>{
+  const idx=students.indexOf(s);
+  const div=document.createElement("div");
+  div.className="student";
+  if(s.name===lastClicked) div.classList.add("flash");
 
-  students
-    .filter(s=>s.name.toLowerCase().includes(q))
-    .sort((a,b)=>a.name.localeCompare(b.name,'ko'))
-    .forEach((s,i)=>{
-      const realIndex = students.indexOf(s);
+  div.innerHTML=`
+  <div class="nameBox">
+    <div>${s.name}</div>
+    <div class="count">남은횟수: ${s.count}</div>
+  </div>
+  <div>
+    <button class="attendBtn" onclick="attend(${idx})">출석</button>
+    ${isAdmin?`
+      <button onclick="changeCount(${idx})">수정</button>
+      <button class="delete" onclick="deleteStudent(${idx})">삭제</button>
+    `:""}
+  </div>`;
 
-      const div = document.createElement("div");
-      div.className="student";
-
-      if(s.name===lastClicked) div.classList.add("flash");
-
-      div.innerHTML=`
-        <div class="nameBox">
-          <div>${s.name}</div>
-          <div class="count">남은횟수: ${s.count}</div>
-        </div>
-        <div>
-          <button class="attendBtn" onclick="attend(${realIndex})">출석</button>
-          ${isAdmin?`
-            <button onclick="changeCount(${realIndex})">수정</button>
-            <button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>
-          `:""}
-        </div>
-      `;
-
-      list.appendChild(div);
-    });
+  list.appendChild(div);
+ });
 }
-
 </script>
-
 </body>
 </html>
