@@ -3,29 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>유월화실</title>
+<title>Your art studio</title>
 
 <style>
-body { font-family:sans-serif; background:#c1e5d2; padding:50px; font-size:2.5em;}
-.top { display:flex; gap:20px; margin-bottom:20px;}
-input { flex:1; padding:30px; font-size:1em;}
-button { padding:25px 35px; border:none; border-radius:15px; background:#f3a4b0; color:white; font-size:1em;}
-.student { background:white; padding:40px; margin-bottom:20px; border-radius:20px; display:flex; justify-content:space-between; align-items:center;}
-.left { display:flex; gap:30px; align-items:center;}
+body { font-family:sans-serif; background:#c1e5d2; padding:30px; font-size:1.5em;}
+.top { display:flex; gap:15px; margin-bottom:15px;}
+input { flex:1; padding:18px; font-size:1em;}
+button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0; color:white; font-size:1em;}
+.student { background:white; padding:25px; margin-bottom:15px; border-radius:15px; display:flex; justify-content:space-between; align-items:center;}
+.left { display:flex; gap:20px; align-items:center;}
 .name { font-weight:bold;}
 .info { color:#555;}
-.adminBtn { position:fixed; bottom:30px; right:30px; background:#333; font-size:0.8em;}
+.adminBtn { position:fixed; bottom:20px; right:20px; background:#333; font-size:0.9em;}
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
-@keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 30px #fff}100%{box-shadow:0 0 0}}
+@keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 20px #fff}100%{box-shadow:0 0 0}}
 
 .modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
-.box {background:white;padding:40px;border-radius:20px;width:90%;max-width:700px;}
+.box {background:white;padding:30px;border-radius:15px;width:90%;max-width:500px;}
 </style>
 </head>
 
 <body>
 
-<h1>유월화실</h1>
+<h1>Your art studio</h1>
+
+<audio id="dingSound" src="dingdong.mp3"></audio>
 
 <div id="dashboard"></div>
 <div id="todoBox"></div>
@@ -67,6 +69,7 @@ const smsBox = document.getElementById("smsBox");
 const adminPanel = document.getElementById("adminPanel");
 const modal = document.getElementById("modal");
 const modalBox = document.getElementById("modalBox");
+const sound = document.getElementById("dingSound");
 
 let students=[], history={}, sales=[], isAdmin=false;
 
@@ -132,6 +135,10 @@ function attend(i){
  history[today()]=history[today()]||[];
  history[today()].push({name:students[i].name});
  students[i].count--;
+
+ sound.currentTime=0;
+ sound.play().catch(()=>{});
+
  save();
 }
 
@@ -209,11 +216,9 @@ function render(){
   const d=getDaysLeft(s);
   let btn="";
 
-  // 🔥 변경된 문자 조건
   if(isAdmin && !s.notified[today()]){
     if([15,7,3].includes(d)){
       const msg=`${s.name}님, 사용기한 ${d}일 남았습니다.`;
-
       btn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>문자</button>`;
       smsList.push(s.name);
       todo.push(s.name+" 문자");
