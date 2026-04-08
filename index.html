@@ -36,6 +36,12 @@ button {
   font-size:20px;
 }
 
+/* 🔥 출석 버튼만 2배 */
+.attendBtn {
+  padding:22px 28px;
+  font-size:26px;
+}
+
 .adminBtn {
   position:fixed;
   bottom:10px;
@@ -53,6 +59,16 @@ button {
   align-items:center;
 }
 
+.nameBox {
+  display:flex;
+  flex-direction:column;
+}
+
+.count {
+  font-size:16px;
+  color:#666;
+}
+
 .delete { background:red; }
 
 /* ✨ 반짝 */
@@ -63,27 +79,6 @@ button {
 }
 .flash { animation: glow 1s infinite; }
 
-/* 달력 */
-.calendarModal {
-  position:fixed;
-  width:100%; height:100%;
-  background:rgba(0,0,0,0.5);
-  display:none;
-  justify-content:center;
-  align-items:center;
-}
-.calendarBox {
-  background:white;
-  padding:20px;
-  border-radius:15px;
-  width:90%;
-  max-width:500px;
-}
-.calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
-.day { padding:10px; text-align:center; background:#eee; border-radius:8px; }
-.today { border:3px solid #5f9578; }
-.sunday { color:#e881c6; }
-.saturday { color:#82d3e8; }
 </style>
 </head>
 
@@ -104,7 +99,7 @@ button {
 
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<!-- 🔊 오디오 직접 삽입 -->
+<!-- 🔊 로컬 소리 -->
 <audio id="dingSound" src="dingdong.mp3" preload="auto"></audio>
 
 <!-- Firebase -->
@@ -126,7 +121,6 @@ let students = [];
 let history = {};
 let isAdmin = false;
 let lastClicked = null;
-let currentDate = new Date();
 
 const sound = document.getElementById("dingSound");
 
@@ -169,7 +163,6 @@ function attend(i){
   history[date].push({name:students[i].name});
   students[i].count--;
 
-  // 🔊 소리 (확실하게)
   sound.currentTime = 0;
   sound.play().catch(()=>{});
 
@@ -204,29 +197,33 @@ function render(){
 
   const q = document.getElementById("search").value.toLowerCase();
 
-  students.filter(s=>s.name.toLowerCase().includes(q))
-  .sort((a,b)=>a.name.localeCompare(b.name,'ko'))
-  .forEach((s,i)=>{
-    const realIndex = students.indexOf(s);
+  students
+    .filter(s=>s.name.toLowerCase().includes(q))
+    .sort((a,b)=>a.name.localeCompare(b.name,'ko'))
+    .forEach((s,i)=>{
+      const realIndex = students.indexOf(s);
 
-    const div = document.createElement("div");
-    div.className="student";
+      const div = document.createElement("div");
+      div.className="student";
 
-    if(s.name===lastClicked) div.classList.add("flash");
+      if(s.name===lastClicked) div.classList.add("flash");
 
-    div.innerHTML=`
-      <div>${s.name} (남은:${s.count})</div>
-      <div>
-        <button onclick="attend(${realIndex})">출석</button>
-        ${isAdmin?`
-          <button onclick="changeCount(${realIndex})">수정</button>
-          <button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>
-        `:""}
-      </div>
-    `;
+      div.innerHTML=`
+        <div class="nameBox">
+          <div>${s.name}</div>
+          <div class="count">남은횟수: ${s.count}</div>
+        </div>
+        <div>
+          <button class="attendBtn" onclick="attend(${realIndex})">출석</button>
+          ${isAdmin?`
+            <button onclick="changeCount(${realIndex})">수정</button>
+            <button class="delete" onclick="deleteStudent(${realIndex})">삭제</button>
+          `:""}
+        </div>
+      `;
 
-    list.appendChild(div);
-  });
+      list.appendChild(div);
+    });
 }
 
 </script>
