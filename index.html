@@ -14,9 +14,6 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 .adminBtn { position:fixed; bottom:10px; right:10px; background:#333;}
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
 @keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 20px #fff}100%{box-shadow:0 0 0}}
-.modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
-.box {background:white;padding:20px;border-radius:10px;width:90%;max-width:400px;}
-.bar {height:20px;background:#f3a4b0;margin:4px 0;}
 </style>
 </head>
 
@@ -32,25 +29,18 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 <input id="nameInput" placeholder="학생 이름">
 <input id="phoneInput" placeholder="학생 번호">
 <input id="parentPhoneInput" placeholder="보호자 번호">
-<input id="periodInput" placeholder="기간(일)">
+<input id="periodInput" placeholder="기간">
 <input id="priceInput" placeholder="수강료">
 <button onclick="addStudent()">추가</button>
-<button onclick="showGraph()">월매출</button>
-<button onclick="showReport()">리포트</button>
 </div>
 
 <div id="list"></div>
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<div class="modal" id="modal" onclick="closeModal(event)">
- <div class="box" id="modalBox"></div>
-</div>
-
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-// 🔥 기존 Firebase 유지
 const firebaseConfig = {
   apiKey:"AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
   authDomain:"student-attendence-e9f58.firebaseapp.com",
@@ -60,6 +50,13 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
+
+// 🔥 DOM 먼저 잡기 (이거 핵심)
+const list = document.getElementById("list");
+const dashboard = document.getElementById("dashboard");
+const todoBox = document.getElementById("todoBox");
+const smsBox = document.getElementById("smsBox");
+const adminPanel = document.getElementById("adminPanel");
 
 let students=[], history={}, sales=[], isAdmin=false;
 
@@ -85,13 +82,12 @@ function toggleAdmin(){
  }
 }
 
-// 학생 추가
 function addStudent(){
- const name=nameInput.value.trim();
- const phone=phoneInput.value.trim();
- const parentPhone=parentPhoneInput.value.trim();
- const period=+periodInput.value;
- const price=+priceInput.value;
+ const name=document.getElementById("nameInput").value.trim();
+ const phone=document.getElementById("phoneInput").value.trim();
+ const parentPhone=document.getElementById("parentPhoneInput").value.trim();
+ const period=+document.getElementById("periodInput").value;
+ const price=+document.getElementById("priceInput").value;
 
  if(!name||!phone||!period||!price) return alert("입력 부족");
 
@@ -106,14 +102,12 @@ function addStudent(){
  save();
 }
 
-// 남은일
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
  return Math.ceil((d-new Date())/(1000*60*60*24));
 }
 
-// 출석
 function attend(i){
  history[today()]=history[today()]||[];
  history[today()].push({name:students[i].name});
@@ -121,7 +115,6 @@ function attend(i){
  save();
 }
 
-// 문자 (학생/보호자 선택)
 function sendSMS(s,msg,toParent=false){
  const phone = toParent && s.parentPhone ? s.parentPhone : s.phone;
  location.href=`sms:${phone}?body=${encodeURIComponent(msg)}`;
@@ -129,7 +122,6 @@ function sendSMS(s,msg,toParent=false){
  save();
 }
 
-// 결제
 function resetStudent(i){
  const s=students[i];
  sales.push({name:s.name,price:s.price,date:today()});
@@ -139,46 +131,6 @@ function resetStudent(i){
  save();
 }
 
-// 월 그래프
-function showGraph(){
- let stats={}, ym=new Date().toISOString().slice(0,7);
-
- sales.forEach(s=>{
-  if(s.date.startsWith(ym)){
-    const d=s.date.split("-")[2];
-    stats[d]=(stats[d]||0)+s.price;
-  }
- });
-
- let html="<h3>월 매출</h3>";
- for(let d in stats){
-  html+=`${d}일 ${stats[d]}원<div class="bar" style="width:${stats[d]/1000}px"></div>`;
- }
-
- modalBox.innerHTML=html;
- modal.style.display="flex";
-}
-
-// 리포트
-function showReport(){
- let total=0, ym=new Date().toISOString().slice(0,7);
- sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price;});
-
- const unpaid=students.filter(s=>s.count<=0).length;
-
- modalBox.innerHTML=`
- <h3>📊 리포트</h3>
- 매출: ${total.toLocaleString()}원<br>
- 미납학생: ${unpaid}명
- `;
- modal.style.display="flex";
-}
-
-function closeModal(e){
- if(e.target.id==="modal") modal.style.display="none";
-}
-
-// 렌더
 function render(){
  list.innerHTML="";
  let smsList=[], todo=[];
@@ -189,7 +141,7 @@ function render(){
 
   if(isAdmin && !s.notified[today()]){
     if(s.count<=2 || d<=3){
-      const msg=`${s.name}님, 수업 ${d}일 / ${s.count}회 남았습니다.`;
+      const msg=`${s.name}님, ${d}일 / ${s.count}회 남았습니다.`;
 
       btn=`
         <button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>학생</button>
@@ -206,7 +158,7 @@ function render(){
 
   list.innerHTML+=`
   <div class="student">
-    <div>${s.name}<br>${s.count}회 / ${d}일 / ${s.price.toLocaleString()}원</div>
+    <div>${s.name}<br>${s.count}회 / ${d}일 / ${s.price}원</div>
     <div>
       <button onclick="attend(${i})">출석</button>
       ${btn}
@@ -215,22 +167,17 @@ function render(){
   </div>`;
  });
 
- // 대시보드
  if(isAdmin){
-  let total=0, ym=new Date().toISOString().slice(0,7);
+  let total=0;
+  const ym=new Date().toISOString().slice(0,7);
   sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price;});
   dashboard.innerHTML=`📊 이번달 매출: ${total.toLocaleString()}원`;
+ } else {
+  dashboard.innerHTML="";
  }
 
- // 오늘 할일
- if(isAdmin && todo.length){
-  todoBox.innerHTML="<b>📌 오늘 할 일</b><br>"+todo.join("<br>");
- }else todoBox.innerHTML="";
-
- // 문자 대상
- if(isAdmin && smsList.length){
-  smsBox.innerHTML="<b>📩 문자 대상</b><br>"+smsList.join(", ");
- }else smsBox.innerHTML="";
+ todoBox.innerHTML = isAdmin && todo.length ? "<b>오늘 할일</b><br>"+todo.join("<br>") : "";
+ smsBox.innerHTML = isAdmin && smsList.length ? "<b>문자 대상</b><br>"+smsList.join(", ") : "";
 }
 </script>
 </body>
