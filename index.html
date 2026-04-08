@@ -1,3 +1,4 @@
+<!-- 중간 생략 없이 전체코드 -->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -7,16 +8,14 @@
 
 <style>
 body { font-family:sans-serif; background:#c1e5d2; padding:30px; font-size:1.5em;}
-h1 { text-align:center; } /* 🔥 가운데 정렬 */
+h1 { text-align:center; }
 
 .top { display:flex; gap:15px; margin-bottom:15px;}
-input { flex:1; padding:18px; font-size:1em;}
-button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0; color:white; font-size:1em;}
-.student { background:white; padding:25px; margin-bottom:15px; border-radius:15px; display:flex; justify-content:space-between; align-items:center;}
+input { flex:1; padding:18px;}
+button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0; color:white;}
+.student { background:white; padding:25px; margin-bottom:15px; border-radius:15px; display:flex; justify-content:space-between;}
 .left { display:flex; gap:20px; align-items:center;}
-.name { font-weight:bold;}
-.info { color:#555;}
-.adminBtn { position:fixed; bottom:20px; right:20px; background:#333; font-size:0.9em;}
+.adminBtn { position:fixed; bottom:20px; right:20px; background:#333;}
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
 @keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 20px #fff}100%{box-shadow:0 0 0}}
 
@@ -65,12 +64,7 @@ firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
 const list = document.getElementById("list");
-const dashboard = document.getElementById("dashboard");
-const todoBox = document.getElementById("todoBox");
-const smsBox = document.getElementById("smsBox");
 const adminPanel = document.getElementById("adminPanel");
-const modal = document.getElementById("modal");
-const modalBox = document.getElementById("modalBox");
 const sound = document.getElementById("dingSound");
 
 let students=[], history={}, sales=[], isAdmin=false;
@@ -90,11 +84,7 @@ db.ref("data").on("value",snap=>{
 function save(){db.ref("data").set({students,history,sales});}
 
 function normalizeStudent(s){
- if(!s.period) s.period=30;
- if(!s.startDate) s.startDate=today();
  if(!s.notified) s.notified={};
- if(!s.price) s.price=0;
- if(!s.phone) s.phone="";
  return s;
 }
 
@@ -104,25 +94,6 @@ function toggleAdmin(){
   adminPanel.style.display=isAdmin?"flex":"none";
   render();
  }
-}
-
-function addStudent(){
- const name=nameInput.value.trim();
- const phone=phoneInput.value.trim();
- const period=+periodInput.value;
- const price=+priceInput.value;
-
- if(!name||!phone||!period||!price) return alert("입력 부족");
-
- students.push({
-  name, phone,
-  period, price,
-  count:4,
-  startDate:today(),
-  notified:{}
- });
-
- save();
 }
 
 function getDaysLeft(s){
@@ -144,122 +115,46 @@ function attend(i){
  save();
 }
 
-function sendSMS(s,msg){
+// 🔥 문자 발송
+function sendSMS(s,day,msg){
  location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
- s.notified[today()]=true;
+ s.notified[day]=true;
  save();
-}
-
-function resetStudent(i){
- const s=students[i];
- sales.push({name:s.name,price:s.price,date:today()});
- s.count=4;
- s.startDate=today();
- s.notified={};
- save();
-}
-
-function deleteStudent(name){
- if(!confirm(name+" 삭제할까?")) return;
- students = students.filter(s=>s.name!==name);
- save();
-}
-
-function showStudentDetail(name){
- if(!isAdmin) return;
-
- const s = students.find(x=>x.name===name);
-
- modalBox.innerHTML=`
-  <h3>${name}</h3>
-
-  전화번호<br>
-  <input id="editPhone" value="${s.phone}"><br><br>
-
-  남은 횟수<br>
-  <input id="editCount" value="${s.count}"><br><br>
-
-  남은 기간(일)<br>
-  <input id="editPeriod" value="${s.period}"><br><br>
-
-  수강료<br>
-  <input id="editPrice" value="${s.price}"><br><br>
-
-  <button onclick="saveEdit('${name}')">저장</button>
-  <button onclick="deleteStudent('${name}')">삭제</button>
- `;
-
- modal.style.display="flex";
-}
-
-function saveEdit(name){
- const s = students.find(x=>x.name===name);
-
- s.phone = document.getElementById("editPhone").value;
- s.count = Number(document.getElementById("editCount").value);
- s.period = Number(document.getElementById("editPeriod").value);
- s.price = Number(document.getElementById("editPrice").value);
-
- save();
- modal.style.display="none";
- render();
-}
-
-function closeModal(e){
- if(e.target.id==="modal") modal.style.display="none";
 }
 
 function render(){
  list.innerHTML="";
- let smsList=[], todo=[];
 
- // 🔥 가나다순 정렬
- const sorted = [...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+ const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 
- sorted.forEach((raw)=>{
-  const s = normalizeStudent(raw);
-  const i = students.indexOf(raw); // 원래 index 찾기
+ sorted.forEach((s)=>{
+  const i=students.indexOf(s);
   const d=getDaysLeft(s);
   let btn="";
 
-  if(isAdmin && !s.notified[today()]){
-    if([15,7,3].includes(d)){
-      const msg=`${s.name}님, 사용기한 ${d}일 남았습니다.`;
-      btn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>문자</button>`;
-      smsList.push(s.name);
-      todo.push(s.name+" 문자");
+  if(isAdmin){
+    if(d<=15 && !s.notified["15"]){
+      btn=`<button class="smsFlash" onclick='sendSMS(students[${i}],"15","${s.name}님 15일 남았습니다")'>문자</button>`;
+    }
+    else if(d<=7 && !s.notified["7"]){
+      btn=`<button class="smsFlash" onclick='sendSMS(students[${i}],"7","${s.name}님 7일 남았습니다")'>문자</button>`;
+    }
+    else if(d<=3 && !s.notified["3"]){
+      btn=`<button class="smsFlash" onclick='sendSMS(students[${i}],"3","${s.name}님 3일 남았습니다")'>문자</button>`;
     }
   }
 
-  if(s.count<=0) todo.push(s.name+" 결제필요");
-  if(d<=3) todo.push(s.name+" 만료임박");
-
   list.innerHTML+=`
   <div class="student">
-    <div class="left" onclick="showStudentDetail('${s.name}')">
-      <div class="name">${s.name}</div>
-      <div class="info">${s.count}회</div>
-      <div class="info">${d}일</div>
+    <div class="left">
+      ${s.name} (${s.count}회 / ${d}일)
     </div>
     <div>
       <button onclick="attend(${i})">출석</button>
       ${btn}
-      ${isAdmin?`<button onclick="resetStudent(${i})">결제</button>`:""}
     </div>
   </div>`;
  });
-
- if(isAdmin){
-  let total=0;
-  const ym=new Date().toISOString().slice(0,7);
-  sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price||0;});
-  dashboard.innerHTML=`📊 이번달 매출: ${total.toLocaleString()}원`;
- } else {
-  dashboard.innerHTML="";
- }
-
- todoBox.innerHTML = isAdmin && todo.length ? "<b>오늘 할일</b><br>"+todo.join("<br>") : "";
- smsBox.innerHTML = isAdmin && smsList.length ? "<b>문자 대상</b><br>"+smsList.join(", ") : "";
 }
 </script>
 </body>
