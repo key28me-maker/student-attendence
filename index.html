@@ -7,6 +7,8 @@
 
 <style>
 body { font-family:sans-serif; background:#c1e5d2; padding:30px; font-size:1.5em;}
+h1 { text-align:center; } /* 🔥 가운데 정렬 */
+
 .top { display:flex; gap:15px; margin-bottom:15px;}
 input { flex:1; padding:18px; font-size:1em;}
 button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0; color:white; font-size:1em;}
@@ -211,8 +213,12 @@ function render(){
  list.innerHTML="";
  let smsList=[], todo=[];
 
- students.forEach((raw,i)=>{
+ // 🔥 가나다순 정렬
+ const sorted = [...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+
+ sorted.forEach((raw)=>{
   const s = normalizeStudent(raw);
+  const i = students.indexOf(raw); // 원래 index 찾기
   const d=getDaysLeft(s);
   let btn="";
 
