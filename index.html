@@ -8,13 +8,12 @@
 <style>
 body { font-family:sans-serif; background:#c1e5d2; padding:20px;}
 .top { display:flex; gap:10px; margin-bottom:10px;}
-input { flex:1; padding:10px;}
+input { flex:1; padding:12px;}
 button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color:white;}
 .student { background:white; padding:15px; margin-bottom:10px; border-radius:10px; display:flex; justify-content:space-between;}
 .adminBtn { position:fixed; bottom:10px; right:10px; background:#333;}
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
 @keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 20px #fff}100%{box-shadow:0 0 0}}
-
 .modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
 .box {background:white;padding:20px;border-radius:10px;width:90%;max-width:400px;}
 .bar {height:20px;background:#f3a4b0;margin:4px 0;}
@@ -26,12 +25,14 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 <h1>학원 운영 시스템</h1>
 
 <div id="dashboard"></div>
+<div id="todoBox"></div>
 <div id="smsBox"></div>
 
 <div class="top" id="adminPanel" style="display:none;">
-<input id="nameInput" placeholder="이름">
-<input id="phoneInput" placeholder="전화번호">
-<input id="periodInput" placeholder="기간">
+<input id="nameInput" placeholder="학생 이름">
+<input id="phoneInput" placeholder="학생 번호">
+<input id="parentPhoneInput" placeholder="보호자 번호">
+<input id="periodInput" placeholder="기간(일)">
 <input id="priceInput" placeholder="수강료">
 <button onclick="addStudent()">추가</button>
 <button onclick="showGraph()">월매출</button>
@@ -49,7 +50,14 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-const firebaseConfig = {apiKey:"",databaseURL:""};
+// 🔥 기존 Firebase 유지
+const firebaseConfig = {
+  apiKey:"AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
+  authDomain:"student-attendence-e9f58.firebaseapp.com",
+  databaseURL:"https://student-attendence-e9f58-default-rtdb.firebaseio.com",
+  projectId:"student-attendence-e9f58"
+};
+
 firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
@@ -59,36 +67,53 @@ function today(){return new Date().toISOString().split("T")[0];}
 
 db.ref("data").on("value",snap=>{
  const v=snap.val();
- if(v){students=v.students||[];history=v.history||{};sales=v.sales||[];}
+ if(v){
+  students=v.students||[];
+  history=v.history||{};
+  sales=v.sales||[];
+ }
  render();
 });
 
 function save(){db.ref("data").set({students,history,sales});}
 
 function toggleAdmin(){
- if(prompt("비번")==="1234"){
+ if(prompt("비밀번호")==="1234"){
   isAdmin=!isAdmin;
-  document.getElementById("adminPanel").style.display=isAdmin?"flex":"none";
+  adminPanel.style.display=isAdmin?"flex":"none";
   render();
  }
 }
 
+// 학생 추가
 function addStudent(){
- const name=nameInput.value;
- const phone=phoneInput.value;
+ const name=nameInput.value.trim();
+ const phone=phoneInput.value.trim();
+ const parentPhone=parentPhoneInput.value.trim();
  const period=+periodInput.value;
  const price=+priceInput.value;
 
- students.push({name,phone,period,price,count:4,startDate:today(),notified:{}});
+ if(!name||!phone||!period||!price) return alert("입력 부족");
+
+ students.push({
+  name, phone, parentPhone,
+  period, price,
+  count:4,
+  startDate:today(),
+  notified:{}
+ });
+
  save();
 }
 
+// 남은일
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
  return Math.ceil((d-new Date())/(1000*60*60*24));
 }
 
+// 출석
 function attend(i){
  history[today()]=history[today()]||[];
  history[today()].push({name:students[i].name});
@@ -96,31 +121,27 @@ function attend(i){
  save();
 }
 
-function sendSMS(s,msg){
- location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
- if(!s.notified[today()]) s.notified[today()]=true;
+// 문자 (학생/보호자 선택)
+function sendSMS(s,msg,toParent=false){
+ const phone = toParent && s.parentPhone ? s.parentPhone : s.phone;
+ location.href=`sms:${phone}?body=${encodeURIComponent(msg)}`;
+ s.notified[today()]=true;
  save();
 }
 
+// 결제
 function resetStudent(i){
  const s=students[i];
  sales.push({name:s.name,price:s.price,date:today()});
- s.count=4; s.startDate=today(); s.notified={};
+ s.count=4;
+ s.startDate=today();
+ s.notified={};
  save();
 }
 
-// 🔥 학생 결제 히스토리
-function showStudentHistory(name){
- const list=sales.filter(s=>s.name===name);
- modalBox.innerHTML="<h3>"+name+" 결제내역</h3>"+
-  list.map(v=>v.date+" / "+v.price+"원").join("<br>");
- modal.style.display="flex";
-}
-
-// 🔥 월 그래프
+// 월 그래프
 function showGraph(){
- let stats={};
- const ym=new Date().toISOString().slice(0,7);
+ let stats={}, ym=new Date().toISOString().slice(0,7);
 
  sales.forEach(s=>{
   if(s.date.startsWith(ym)){
@@ -138,21 +159,16 @@ function showGraph(){
  modal.style.display="flex";
 }
 
-// 🔥 리포트
+// 리포트
 function showReport(){
- let total=0;
- const ym=new Date().toISOString().slice(0,7);
-
- sales.forEach(s=>{
-  if(s.date.startsWith(ym)) total+=s.price;
- });
+ let total=0, ym=new Date().toISOString().slice(0,7);
+ sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price;});
 
  const unpaid=students.filter(s=>s.count<=0).length;
 
  modalBox.innerHTML=`
  <h3>📊 리포트</h3>
- 매출: ${total}원<br>
- 결제건수: ${sales.length}<br>
+ 매출: ${total.toLocaleString()}원<br>
  미납학생: ${unpaid}명
  `;
  modal.style.display="flex";
@@ -162,10 +178,10 @@ function closeModal(e){
  if(e.target.id==="modal") modal.style.display="none";
 }
 
+// 렌더
 function render(){
- let smsList=[];
-
  list.innerHTML="";
+ let smsList=[], todo=[];
 
  students.forEach((s,i)=>{
   const d=getDaysLeft(s);
@@ -173,18 +189,24 @@ function render(){
 
   if(isAdmin && !s.notified[today()]){
     if(s.count<=2 || d<=3){
-      const msg=`${s.name}님, 수업 ${d}일/${s.count}회 남았습니다.`;
-      btn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>문자</button>`;
-      smsList.push({s,msg});
+      const msg=`${s.name}님, 수업 ${d}일 / ${s.count}회 남았습니다.`;
+
+      btn=`
+        <button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>학생</button>
+        ${s.parentPhone?`<button onclick='sendSMS(${JSON.stringify(s)}, "${msg}", true)'>보호자</button>`:""}
+      `;
+
+      smsList.push(s.name);
+      todo.push(s.name+" 문자");
     }
   }
 
+  if(s.count<=0) todo.push(s.name+" 결제필요");
+  if(d<=3) todo.push(s.name+" 만료임박");
+
   list.innerHTML+=`
   <div class="student">
-    <div onclick="showStudentHistory('${s.name}')">
-      ${s.name}<br>
-      ${s.count}회 / ${d}일 / ${s.price}원
-    </div>
+    <div>${s.name}<br>${s.count}회 / ${d}일 / ${s.price.toLocaleString()}원</div>
     <div>
       <button onclick="attend(${i})">출석</button>
       ${btn}
@@ -195,16 +217,19 @@ function render(){
 
  // 대시보드
  if(isAdmin){
-  let total=0;
-  const ym=new Date().toISOString().slice(0,7);
+  let total=0, ym=new Date().toISOString().slice(0,7);
   sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price;});
-
-  dashboard.innerHTML=`📊 이번달 매출: ${total}원`;
+  dashboard.innerHTML=`📊 이번달 매출: ${total.toLocaleString()}원`;
  }
 
- // 문자 리스트
+ // 오늘 할일
+ if(isAdmin && todo.length){
+  todoBox.innerHTML="<b>📌 오늘 할 일</b><br>"+todo.join("<br>");
+ }else todoBox.innerHTML="";
+
+ // 문자 대상
  if(isAdmin && smsList.length){
-  smsBox.innerHTML="<b>문자 대상</b><br>"+smsList.map(x=>x.s.name).join(", ");
+  smsBox.innerHTML="<b>📩 문자 대상</b><br>"+smsList.join(", ");
  }else smsBox.innerHTML="";
 }
 </script>
