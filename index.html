@@ -16,31 +16,8 @@ button { padding:14px; border:none; border-radius:10px; background:#f3a4b0; colo
 .nameBox { display:flex; flex-direction:column;}
 .count { font-size:16px; color:#666;}
 .delete { background:red;}
-
-.flash { animation: glow 1s infinite;}
+.smsFlash { animation: glow 1s infinite; background:#ff6b6b !important;}
 @keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 25px #fff}100%{box-shadow:0 0 0}}
-
-/* 그래프 */
-.chartModal {
-  position:fixed;
-  width:100%; height:100%;
-  background:rgba(0,0,0,0.5);
-  display:none;
-  justify-content:center;
-  align-items:center;
-}
-.chartBox {
-  background:white;
-  padding:20px;
-  border-radius:15px;
-  width:90%;
-  max-width:500px;
-}
-.bar {
-  height:20px;
-  background:#f3a4b0;
-  margin:5px 0;
-}
 </style>
 </head>
 
@@ -48,16 +25,17 @@ button { padding:14px; border:none; border-radius:10px; background:#f3a4b0; colo
 
 <h1>출석 체크</h1>
 
+<div id="smsBox" style="display:none; background:#fff3cd; padding:15px; border-radius:12px; margin-bottom:15px;"></div>
+
 <div class="top">
 <input id="search" placeholder="이름 검색" oninput="render()">
 </div>
 
 <div class="top" id="adminPanel" style="display:none;">
 <input id="nameInput" placeholder="학생 이름">
+<input id="phoneInput" placeholder="전화번호">
+<input id="periodInput" placeholder="이용기간(일)">
 <button onclick="addStudent()">추가</button>
-<button onclick="showToday()">오늘출석</button>
-<button onclick="pickDate()">날짜조회</button>
-<button onclick="showMonth()">월통계</button>
 </div>
 
 <div id="list"></div>
@@ -65,33 +43,31 @@ button { padding:14px; border:none; border-radius:10px; background:#f3a4b0; colo
 
 <audio id="dingSound" src="dingdong.mp3"></audio>
 
-<!-- 그래프 -->
-<div class="chartModal" id="chartModal" onclick="closeChart(event)">
-  <div class="chartBox" id="chartBox"></div>
-</div>
-
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
 const firebaseConfig = {
-  apiKey:"AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
-  authDomain:"student-attendence-e9f58.firebaseapp.com",
-  databaseURL:"https://student-attendence-e9f58-default-rtdb.firebaseio.com",
-  projectId:"student-attendence-e9f58"
+  apiKey:"AIzaSy...",
+  authDomain:"...",
+  databaseURL:"...",
+  projectId:"..."
 };
 
 firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
-let students=[], history={}, isAdmin=false, lastClicked=null;
+let students=[], history={}, isAdmin=false;
 const sound=document.getElementById("dingSound");
 
 function today(){ return new Date().toISOString().split("T")[0]; }
 
 db.ref("data").on("value",(snap)=>{
  const val=snap.val();
- if(val){ students=val.students||[]; history=val.history||{};}
+ if(val){
+  students=val.students||[];
+  history=val.history||{};
+ }
  render();
 });
 
@@ -108,110 +84,59 @@ function toggleAdmin(){
 
 function addStudent(){
  const name=document.getElementById("nameInput").value.trim();
- if(!name)return;
- students.push({name,count:10});
+ const phone=document.getElementById("phoneInput").value.trim();
+ const period=Number(document.getElementById("periodInput").value);
+
+ if(!name || !phone || !period) return;
+
+ students.push({
+  name, phone,
+  count:4,
+  startDate: today(),
+  period,
+  notified:{}
+ });
+
  save();
 }
 
-// 🔥 출석 (마이너스 허용)
+function getDaysLeft(s){
+ const start=new Date(s.startDate);
+ const expire=new Date(start);
+ expire.setDate(expire.getDate()+s.period);
+
+ return Math.ceil((expire-new Date())/(1000*60*60*24));
+}
+
+// 🔥 하루 여러번 출석 가능
 function attend(i){
- if(!confirm("출석하시려면 확인을 눌러주세요.")) return;
+ if(!confirm("출석하시려면 확인")) return;
 
  const date=today();
  if(!history[date]) history[date]=[];
 
- if(history[date].some(r=>r.name===students[i].name)){
-  alert("이미 출석함");
-  return;
- }
-
- history[date].push({name:students[i].name});
- students[i].count--; // 🔥 마이너스 가능
+ history[date].push({name:students[i].name, time:new Date().toISOString()});
+ students[i].count--;
 
  sound.currentTime=0;
  sound.play().catch(()=>{});
 
- lastClicked=students[i].name;
- save();
-
- setTimeout(()=>{ lastClicked=null; render(); },3000);
-}
-
-// 오늘 출석 + 취소
-function showToday(){
- const list=history[today()]||[];
- if(list.length===0){ alert("없음"); return;}
-
- const names=list.map(v=>v.name).join("\n");
- const target=prompt("출석자:\n\n"+names+"\n\n취소할 이름 입력");
-
- if(!target) return;
-
- history[today()]=list.filter(v=>v.name!==target);
-
- const s=students.find(s=>s.name===target);
- if(s) s.count++; // 복구
-
  save();
 }
 
-// 날짜 조회
-function pickDate(){
- const d=prompt("날짜 입력 (2026-04-08)");
- if(!d) return;
- const list=history[d]||[];
- if(list.length===0){ alert("없음"); return;}
- alert(d+" 출석:\n\n"+list.map(v=>v.name).join("\n"));
-}
+// 문자 발송
+function sendSMS(s,msg){
+ location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 
-// 🔥 월 통계
-function showMonth(){
- const now=new Date();
- const month=String(now.getMonth()+1).padStart(2,"0");
- const year=now.getFullYear();
-
- let stats={};
-
- for(let d in history){
-  if(d.startsWith(year+"-"+month)){
-    history[d].forEach(r=>{
-      stats[r.name]=(stats[r.name]||0)+1;
-    });
-  }
- }
-
- const box=document.getElementById("chartBox");
- box.innerHTML="<h3>"+year+"-"+month+" 출석</h3>";
-
- for(let name in stats){
-  const count=stats[name];
-  box.innerHTML+=`
-    <div>${name} (${count})</div>
-    <div class="bar" style="width:${count*20}px"></div>
-  `;
- }
-
- document.getElementById("chartModal").style.display="flex";
-}
-
-function closeChart(e){
- if(e.target.id==="chartModal"){
-  document.getElementById("chartModal").style.display="none";
- }
-}
-
-function deleteStudent(i){
- if(!confirm("삭제?")) return;
- students.splice(i,1);
+ // 🔥 오늘 보낸 기록 저장
+ if(!s.notified[today()]) s.notified[today()]=true;
  save();
 }
 
-function changeCount(i){
- const v=prompt("새 횟수",students[i].count);
- if(v===null) return;
- const num=Number(v);
- if(isNaN(num)) return alert("숫자 입력");
- students[i].count=num;
+function resetStudent(i){
+ students[i].count=4;
+ students[i].startDate=today();
+ students[i].notified={};
  save();
 }
 
@@ -220,30 +145,103 @@ function render(){
  list.innerHTML="";
  const q=document.getElementById("search").value.toLowerCase();
 
+ let smsList=[];
+
  students
  .filter(s=>s.name.toLowerCase().includes(q))
  .sort((a,b)=>a.name.localeCompare(b.name,'ko'))
  .forEach((s,i)=>{
+
   const idx=students.indexOf(s);
   const div=document.createElement("div");
   div.className="student";
-  if(s.name===lastClicked) div.classList.add("flash");
+
+  const daysLeft=getDaysLeft(s);
+  let smsBtn="";
+
+  const alreadySent = s.notified[today()];
+
+  // 🔥 조건 + 중복 방지 + 오늘 숨김
+  if(!alreadySent){
+
+    if(s.count===3 && daysLeft<=Math.ceil(s.period*0.3)){
+      const msg=`${s.name}님, 안녕하세요 🙂
+현재 수업 이용기간이 ${daysLeft}일 남았습니다.
+남은 횟수는 ${s.count}회입니다.`;
+
+      if(isAdmin){
+        smsBtn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, \`${msg}\`)'>문자</button>`;
+        smsList.push({s,msg});
+      }
+    }
+
+    if(s.count===2 && daysLeft<=Math.ceil(s.period*0.15)){
+      const msg=`${s.name}님, 수업 이용기간이 얼마 남지 않았습니다.
+현재 ${daysLeft}일 / ${s.count}회 남아있습니다.`;
+
+      if(isAdmin){
+        smsBtn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, \`${msg}\`)'>문자</button>`;
+        smsList.push({s,msg});
+      }
+    }
+
+    if(daysLeft<=3){
+      const msg=`${s.name}님, 수업 이용기간이 곧 종료됩니다.
+${daysLeft}일 남았으며 ${s.count}회 남아있습니다.`;
+
+      if(isAdmin){
+        smsBtn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, \`${msg}\`)'>문자</button>`;
+        smsList.push({s,msg});
+      }
+    }
+
+  }
+
+  if(daysLeft<=3){
+    div.style.background="#ffe5e5";
+  }
 
   div.innerHTML=`
   <div class="nameBox">
     <div>${s.name}</div>
-    <div class="count">남은횟수: ${s.count}</div>
+    <div class="count">남은횟수: ${s.count} / ${daysLeft}일 남음</div>
   </div>
   <div>
     <button class="attendBtn" onclick="attend(${idx})">출석</button>
+    ${smsBtn}
     ${isAdmin?`
-      <button onclick="changeCount(${idx})">수정</button>
+      <button onclick="resetStudent(${idx})">재등록</button>
       <button class="delete" onclick="deleteStudent(${idx})">삭제</button>
     `:""}
   </div>`;
 
   list.appendChild(div);
  });
+
+ // 🔥 상단 문자 리스트
+ const box=document.getElementById("smsBox");
+
+ if(isAdmin && smsList.length>0){
+  box.style.display="block";
+  box.innerHTML="<b>📩 오늘 문자 대상</b><br><br>";
+
+  smsList.forEach(obj=>{
+    box.innerHTML+=`
+      <div style="margin-bottom:8px;">
+        ${obj.s.name}
+        <button onclick='sendSMS(${JSON.stringify(obj.s)}, \`${obj.msg}\`)'>보내기</button>
+      </div>`;
+  });
+
+ }else{
+  box.style.display="none";
+ }
+}
+
+function deleteStudent(i){
+ if(!confirm("삭제?")) return;
+ students.splice(i,1);
+ save();
 }
 </script>
 </body>
