@@ -36,7 +36,6 @@ button {
   font-size:20px;
 }
 
-/* 🔥 출석 버튼만 2배 */
 .attendBtn {
   padding:22px 28px;
   font-size:26px;
@@ -71,7 +70,7 @@ button {
 
 .delete { background:red; }
 
-/* ✨ 반짝 */
+/* 반짝 */
 @keyframes glow {
   0% { box-shadow:0 0 0px #fff; }
   50% { box-shadow:0 0 25px #fff; }
@@ -90,19 +89,19 @@ button {
   <input id="search" placeholder="이름 검색" oninput="render()">
 </div>
 
+<!-- 관리자 -->
 <div class="top" id="adminPanel" style="display:none;">
   <input id="nameInput" placeholder="학생 이름">
   <button onclick="addStudent()">추가</button>
+  <button onclick="showToday()">오늘출석</button>
 </div>
 
 <div id="list"></div>
 
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<!-- 🔊 로컬 소리 -->
 <audio id="dingSound" src="dingdong.mp3" preload="auto"></audio>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
@@ -123,6 +122,10 @@ let isAdmin = false;
 let lastClicked = null;
 
 const sound = document.getElementById("dingSound");
+
+function today(){
+  return new Date().toISOString().split("T")[0];
+}
 
 // Firebase
 db.ref("data").on("value", (snap) => {
@@ -154,10 +157,14 @@ function addStudent(){
   save();
 }
 
+// 🔥 출석 (확인 추가)
 function attend(i){
+  const ok = confirm("출석하시려면 확인을 눌러주세요.");
+  if(!ok) return;
+
   if(students[i].count<=0) return alert("횟수 없음");
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = today();
   if(!history[date]) history[date]=[];
 
   history[date].push({name:students[i].name});
@@ -174,6 +181,18 @@ function attend(i){
     lastClicked = null;
     render();
   },3000);
+}
+
+// 🔥 오늘 출석자 보기
+function showToday(){
+  const list = history[today()] || [];
+  if(list.length===0){
+    alert("오늘 출석 없음");
+    return;
+  }
+
+  const names = list.map(v=>v.name).join("\n");
+  alert("오늘 출석:\n\n" + names);
 }
 
 function deleteStudent(i){
