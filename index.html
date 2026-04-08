@@ -29,7 +29,7 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 <input id="nameInput" placeholder="학생 이름">
 <input id="phoneInput" placeholder="학생 번호">
 <input id="parentPhoneInput" placeholder="보호자 번호">
-<input id="periodInput" placeholder="기간">
+<input id="periodInput" placeholder="기간(일)">
 <input id="priceInput" placeholder="수강료">
 <button onclick="addStudent()">추가</button>
 </div>
@@ -51,7 +51,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
-// 🔥 DOM 먼저 잡기 (이거 핵심)
 const list = document.getElementById("list");
 const dashboard = document.getElementById("dashboard");
 const todoBox = document.getElementById("todoBox");
@@ -74,6 +73,15 @@ db.ref("data").on("value",snap=>{
 
 function save(){db.ref("data").set({students,history,sales});}
 
+// 🔥 기존 데이터 자동 보정
+function normalizeStudent(s){
+ if(!s.period) s.period = 30;        // 기본 30일
+ if(!s.price) s.price = 0;           // 기본 0원
+ if(!s.startDate) s.startDate = today();
+ if(!s.notified) s.notified = {};
+ return s;
+}
+
 function toggleAdmin(){
  if(prompt("비밀번호")==="1234"){
   isAdmin=!isAdmin;
@@ -83,11 +91,11 @@ function toggleAdmin(){
 }
 
 function addStudent(){
- const name=document.getElementById("nameInput").value.trim();
- const phone=document.getElementById("phoneInput").value.trim();
- const parentPhone=document.getElementById("parentPhoneInput").value.trim();
- const period=+document.getElementById("periodInput").value;
- const price=+document.getElementById("priceInput").value;
+ const name=nameInput.value.trim();
+ const phone=phoneInput.value.trim();
+ const parentPhone=parentPhoneInput.value.trim();
+ const period=+periodInput.value;
+ const price=+priceInput.value;
 
  if(!name||!phone||!period||!price) return alert("입력 부족");
 
@@ -135,7 +143,9 @@ function render(){
  list.innerHTML="";
  let smsList=[], todo=[];
 
- students.forEach((s,i)=>{
+ students.forEach((raw,i)=>{
+  const s = normalizeStudent(raw); // 🔥 여기 핵심
+
   const d=getDaysLeft(s);
   let btn="";
 
@@ -158,7 +168,7 @@ function render(){
 
   list.innerHTML+=`
   <div class="student">
-    <div>${s.name}<br>${s.count}회 / ${d}일 / ${s.price}원</div>
+    <div>${s.name}<br>${s.count}회 / ${d}일 / ${s.price.toLocaleString()}원</div>
     <div>
       <button onclick="attend(${i})">출석</button>
       ${btn}
@@ -167,6 +177,7 @@ function render(){
   </div>`;
  });
 
+ // 대시보드
  if(isAdmin){
   let total=0;
   const ym=new Date().toISOString().slice(0,7);
