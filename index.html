@@ -73,10 +73,9 @@ db.ref("data").on("value",snap=>{
 
 function save(){db.ref("data").set({students,history,sales});}
 
-// 🔥 기존 데이터 자동 보정
+// 기존 데이터 보정
 function normalizeStudent(s){
- if(!s.period) s.period = 30;        // 기본 30일
- if(!s.price) s.price = 0;           // 기본 0원
+ if(!s.period) s.period = 30;
  if(!s.startDate) s.startDate = today();
  if(!s.notified) s.notified = {};
  return s;
@@ -144,8 +143,7 @@ function render(){
  let smsList=[], todo=[];
 
  students.forEach((raw,i)=>{
-  const s = normalizeStudent(raw); // 🔥 여기 핵심
-
+  const s = normalizeStudent(raw);
   const d=getDaysLeft(s);
   let btn="";
 
@@ -166,9 +164,10 @@ function render(){
   if(s.count<=0) todo.push(s.name+" 결제필요");
   if(d<=3) todo.push(s.name+" 만료임박");
 
+  // 🔥 금액 제거 (여기 핵심)
   list.innerHTML+=`
   <div class="student">
-    <div>${s.name}<br>${s.count}회 / ${d}일 / ${s.price.toLocaleString()}원</div>
+    <div>${s.name}<br>${s.count}회 / ${d}일</div>
     <div>
       <button onclick="attend(${i})">출석</button>
       ${btn}
@@ -177,11 +176,11 @@ function render(){
   </div>`;
  });
 
- // 대시보드
+ // 관리자만 매출 표시
  if(isAdmin){
   let total=0;
   const ym=new Date().toISOString().slice(0,7);
-  sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price;});
+  sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price||0;});
   dashboard.innerHTML=`📊 이번달 매출: ${total.toLocaleString()}원`;
  } else {
   dashboard.innerHTML="";
