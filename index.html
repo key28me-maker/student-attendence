@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>학원 운영 시스템</title>
+<title>유월화실</title>
 
 <style>
 body { font-family:sans-serif; background:#c1e5d2; padding:20px;}
@@ -25,7 +25,7 @@ button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color
 
 <body>
 
-<h1>학원 운영 시스템</h1>
+<h1>유월화실</h1>
 
 <div id="dashboard"></div>
 <div id="todoBox"></div>
@@ -90,6 +90,7 @@ function normalizeStudent(s){
  if(!s.startDate) s.startDate=today();
  if(!s.notified) s.notified={};
  if(!s.price) s.price=0;
+ if(!s.phone) s.phone="";
  return s;
 }
 
@@ -128,8 +129,10 @@ function getDaysLeft(s){
  return Math.ceil((d-new Date())/(1000*60*60*24));
 }
 
-// 출석
+// 🔥 출석 (확인 팝업)
 function attend(i){
+ if(!confirm("출석하시겠습니까?")) return;
+
  history[today()]=history[today()]||[];
  history[today()].push({name:students[i].name});
  students[i].count--;
@@ -153,46 +156,52 @@ function resetStudent(i){
  save();
 }
 
-// 🔥 학생 삭제
+// 삭제
 function deleteStudent(name){
  if(!confirm(name+" 삭제할까?")) return;
  students = students.filter(s=>s.name!==name);
  save();
 }
 
-// 상세
+// 🔥 관리자 수정 팝업
 function showStudentDetail(name){
  if(!isAdmin) return;
 
  const s = students.find(x=>x.name===name);
- const list = sales.filter(v=>v.name===name);
 
  modalBox.innerHTML=`
   <h3>${name}</h3>
-  남은 횟수: ${s.count}회<br>
-  수강료: ${s.price.toLocaleString()}원<br><br>
 
-  <button onclick="editCount('${name}')">횟수 수정</button>
+  전화번호<br>
+  <input id="editPhone" value="${s.phone}"><br><br>
+
+  남은 횟수<br>
+  <input id="editCount" value="${s.count}"><br><br>
+
+  남은 기간(일)<br>
+  <input id="editPeriod" value="${s.period}"><br><br>
+
+  수강료<br>
+  <input id="editPrice" value="${s.price}"><br><br>
+
+  <button onclick="saveEdit('${name}')">저장</button>
   <button onclick="deleteStudent('${name}')">삭제</button>
-
-  <hr>
-  <b>결제 이력</b><br>
-  ${list.length ? list.map(v=>v.date+" / "+v.price+"원").join("<br>") : "없음"}
  `;
+
  modal.style.display="flex";
 }
 
-// 횟수 수정
-function editCount(name){
+// 저장
+function saveEdit(name){
  const s = students.find(x=>x.name===name);
- const v = prompt("새 횟수", s.count);
- if(v===null) return;
 
- const num = Number(v);
- if(isNaN(num)) return alert("숫자만");
+ s.phone = document.getElementById("editPhone").value;
+ s.count = Number(document.getElementById("editCount").value);
+ s.period = Number(document.getElementById("editPeriod").value);
+ s.price = Number(document.getElementById("editPrice").value);
 
- s.count=num;
  save();
+ modal.style.display="none";
  render();
 }
 
