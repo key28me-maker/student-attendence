@@ -3,79 +3,70 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>출석 체크</title>
+<title>학원 운영 시스템</title>
 
 <style>
-body { font-family:sans-serif; background:#c1e5d2; padding:20px; font-size:20px;}
+body { font-family:sans-serif; background:#c1e5d2; padding:20px;}
 .top { display:flex; gap:10px; margin-bottom:10px;}
-input { flex:1; padding:14px; font-size:20px;}
-button { padding:14px; border:none; border-radius:10px; background:#f3a4b0; color:white; font-size:20px;}
-.attendBtn { padding:22px 28px; font-size:26px;}
+input { flex:1; padding:10px;}
+button { padding:10px; border:none; border-radius:8px; background:#f3a4b0; color:white;}
+.student { background:white; padding:15px; margin-bottom:10px; border-radius:10px; display:flex; justify-content:space-between;}
 .adminBtn { position:fixed; bottom:10px; right:10px; background:#333;}
-.student { background:white; padding:18px; margin-bottom:10px; border-radius:12px; display:flex; justify-content:space-between;}
-.nameBox { display:flex; flex-direction:column;}
-.count { font-size:16px; color:#666;}
-.delete { background:red;}
-.smsFlash { animation: glow 1s infinite; background:#ff6b6b !important;}
-@keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 25px #fff}100%{box-shadow:0 0 0}}
+.smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
+@keyframes glow {0%{box-shadow:0 0 0}50%{box-shadow:0 0 20px #fff}100%{box-shadow:0 0 0}}
+
+.modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
+.box {background:white;padding:20px;border-radius:10px;width:90%;max-width:400px;}
+.bar {height:20px;background:#f3a4b0;margin:4px 0;}
 </style>
 </head>
 
 <body>
 
-<h1>출석 체크</h1>
+<h1>학원 운영 시스템</h1>
 
-<div id="smsBox" style="display:none; background:#fff3cd; padding:15px; border-radius:12px; margin-bottom:15px;"></div>
-
-<div class="top">
-<input id="search" placeholder="이름 검색" oninput="render()">
-</div>
+<div id="dashboard"></div>
+<div id="smsBox"></div>
 
 <div class="top" id="adminPanel" style="display:none;">
-<input id="nameInput" placeholder="학생 이름">
+<input id="nameInput" placeholder="이름">
 <input id="phoneInput" placeholder="전화번호">
-<input id="periodInput" placeholder="이용기간(일)">
+<input id="periodInput" placeholder="기간">
+<input id="priceInput" placeholder="수강료">
 <button onclick="addStudent()">추가</button>
+<button onclick="showGraph()">월매출</button>
+<button onclick="showReport()">리포트</button>
 </div>
 
 <div id="list"></div>
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<audio id="dingSound" src="dingdong.mp3"></audio>
+<div class="modal" id="modal" onclick="closeModal(event)">
+ <div class="box" id="modalBox"></div>
+</div>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-const firebaseConfig = {
-  apiKey:"AIzaSy...",
-  authDomain:"...",
-  databaseURL:"...",
-  projectId:"..."
-};
-
+const firebaseConfig = {apiKey:"",databaseURL:""};
 firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
-let students=[], history={}, isAdmin=false;
-const sound=document.getElementById("dingSound");
+let students=[], history={}, sales=[], isAdmin=false;
 
-function today(){ return new Date().toISOString().split("T")[0]; }
+function today(){return new Date().toISOString().split("T")[0];}
 
-db.ref("data").on("value",(snap)=>{
- const val=snap.val();
- if(val){
-  students=val.students||[];
-  history=val.history||{};
- }
+db.ref("data").on("value",snap=>{
+ const v=snap.val();
+ if(v){students=v.students||[];history=v.history||{};sales=v.sales||[];}
  render();
 });
 
-function save(){ db.ref("data").set({students,history}); }
+function save(){db.ref("data").set({students,history,sales});}
 
 function toggleAdmin(){
- const pw=prompt("비밀번호");
- if(pw==="1234"){
+ if(prompt("비번")==="1234"){
   isAdmin=!isAdmin;
   document.getElementById("adminPanel").style.display=isAdmin?"flex":"none";
   render();
@@ -83,165 +74,138 @@ function toggleAdmin(){
 }
 
 function addStudent(){
- const name=document.getElementById("nameInput").value.trim();
- const phone=document.getElementById("phoneInput").value.trim();
- const period=Number(document.getElementById("periodInput").value);
+ const name=nameInput.value;
+ const phone=phoneInput.value;
+ const period=+periodInput.value;
+ const price=+priceInput.value;
 
- if(!name || !phone || !period) return;
-
- students.push({
-  name, phone,
-  count:4,
-  startDate: today(),
-  period,
-  notified:{}
- });
-
+ students.push({name,phone,period,price,count:4,startDate:today(),notified:{}});
  save();
 }
 
 function getDaysLeft(s){
- const start=new Date(s.startDate);
- const expire=new Date(start);
- expire.setDate(expire.getDate()+s.period);
-
- return Math.ceil((expire-new Date())/(1000*60*60*24));
+ let d=new Date(s.startDate);
+ d.setDate(d.getDate()+s.period);
+ return Math.ceil((d-new Date())/(1000*60*60*24));
 }
 
-// 🔥 하루 여러번 출석 가능
 function attend(i){
- if(!confirm("출석하시려면 확인")) return;
-
- const date=today();
- if(!history[date]) history[date]=[];
-
- history[date].push({name:students[i].name, time:new Date().toISOString()});
+ history[today()]=history[today()]||[];
+ history[today()].push({name:students[i].name});
  students[i].count--;
-
- sound.currentTime=0;
- sound.play().catch(()=>{});
-
  save();
 }
 
-// 문자 발송
 function sendSMS(s,msg){
  location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
-
- // 🔥 오늘 보낸 기록 저장
  if(!s.notified[today()]) s.notified[today()]=true;
  save();
 }
 
 function resetStudent(i){
- students[i].count=4;
- students[i].startDate=today();
- students[i].notified={};
+ const s=students[i];
+ sales.push({name:s.name,price:s.price,date:today()});
+ s.count=4; s.startDate=today(); s.notified={};
  save();
+}
+
+// 🔥 학생 결제 히스토리
+function showStudentHistory(name){
+ const list=sales.filter(s=>s.name===name);
+ modalBox.innerHTML="<h3>"+name+" 결제내역</h3>"+
+  list.map(v=>v.date+" / "+v.price+"원").join("<br>");
+ modal.style.display="flex";
+}
+
+// 🔥 월 그래프
+function showGraph(){
+ let stats={};
+ const ym=new Date().toISOString().slice(0,7);
+
+ sales.forEach(s=>{
+  if(s.date.startsWith(ym)){
+    const d=s.date.split("-")[2];
+    stats[d]=(stats[d]||0)+s.price;
+  }
+ });
+
+ let html="<h3>월 매출</h3>";
+ for(let d in stats){
+  html+=`${d}일 ${stats[d]}원<div class="bar" style="width:${stats[d]/1000}px"></div>`;
+ }
+
+ modalBox.innerHTML=html;
+ modal.style.display="flex";
+}
+
+// 🔥 리포트
+function showReport(){
+ let total=0;
+ const ym=new Date().toISOString().slice(0,7);
+
+ sales.forEach(s=>{
+  if(s.date.startsWith(ym)) total+=s.price;
+ });
+
+ const unpaid=students.filter(s=>s.count<=0).length;
+
+ modalBox.innerHTML=`
+ <h3>📊 리포트</h3>
+ 매출: ${total}원<br>
+ 결제건수: ${sales.length}<br>
+ 미납학생: ${unpaid}명
+ `;
+ modal.style.display="flex";
+}
+
+function closeModal(e){
+ if(e.target.id==="modal") modal.style.display="none";
 }
 
 function render(){
- const list=document.getElementById("list");
- list.innerHTML="";
- const q=document.getElementById("search").value.toLowerCase();
-
  let smsList=[];
 
- students
- .filter(s=>s.name.toLowerCase().includes(q))
- .sort((a,b)=>a.name.localeCompare(b.name,'ko'))
- .forEach((s,i)=>{
+ list.innerHTML="";
 
-  const idx=students.indexOf(s);
-  const div=document.createElement("div");
-  div.className="student";
+ students.forEach((s,i)=>{
+  const d=getDaysLeft(s);
+  let btn="";
 
-  const daysLeft=getDaysLeft(s);
-  let smsBtn="";
-
-  const alreadySent = s.notified[today()];
-
-  // 🔥 조건 + 중복 방지 + 오늘 숨김
-  if(!alreadySent){
-
-    if(s.count===3 && daysLeft<=Math.ceil(s.period*0.3)){
-      const msg=`${s.name}님, 안녕하세요 🙂
-현재 수업 이용기간이 ${daysLeft}일 남았습니다.
-남은 횟수는 ${s.count}회입니다.`;
-
-      if(isAdmin){
-        smsBtn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, \`${msg}\`)'>문자</button>`;
-        smsList.push({s,msg});
-      }
+  if(isAdmin && !s.notified[today()]){
+    if(s.count<=2 || d<=3){
+      const msg=`${s.name}님, 수업 ${d}일/${s.count}회 남았습니다.`;
+      btn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, "${msg}")'>문자</button>`;
+      smsList.push({s,msg});
     }
-
-    if(s.count===2 && daysLeft<=Math.ceil(s.period*0.15)){
-      const msg=`${s.name}님, 수업 이용기간이 얼마 남지 않았습니다.
-현재 ${daysLeft}일 / ${s.count}회 남아있습니다.`;
-
-      if(isAdmin){
-        smsBtn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, \`${msg}\`)'>문자</button>`;
-        smsList.push({s,msg});
-      }
-    }
-
-    if(daysLeft<=3){
-      const msg=`${s.name}님, 수업 이용기간이 곧 종료됩니다.
-${daysLeft}일 남았으며 ${s.count}회 남아있습니다.`;
-
-      if(isAdmin){
-        smsBtn=`<button class="smsFlash" onclick='sendSMS(${JSON.stringify(s)}, \`${msg}\`)'>문자</button>`;
-        smsList.push({s,msg});
-      }
-    }
-
   }
 
-  if(daysLeft<=3){
-    div.style.background="#ffe5e5";
-  }
-
-  div.innerHTML=`
-  <div class="nameBox">
-    <div>${s.name}</div>
-    <div class="count">남은횟수: ${s.count} / ${daysLeft}일 남음</div>
-  </div>
-  <div>
-    <button class="attendBtn" onclick="attend(${idx})">출석</button>
-    ${smsBtn}
-    ${isAdmin?`
-      <button onclick="resetStudent(${idx})">재등록</button>
-      <button class="delete" onclick="deleteStudent(${idx})">삭제</button>
-    `:""}
+  list.innerHTML+=`
+  <div class="student">
+    <div onclick="showStudentHistory('${s.name}')">
+      ${s.name}<br>
+      ${s.count}회 / ${d}일 / ${s.price}원
+    </div>
+    <div>
+      <button onclick="attend(${i})">출석</button>
+      ${btn}
+      ${isAdmin?`<button onclick="resetStudent(${i})">결제</button>`:""}
+    </div>
   </div>`;
-
-  list.appendChild(div);
  });
 
- // 🔥 상단 문자 리스트
- const box=document.getElementById("smsBox");
+ // 대시보드
+ if(isAdmin){
+  let total=0;
+  const ym=new Date().toISOString().slice(0,7);
+  sales.forEach(s=>{if(s.date.startsWith(ym)) total+=s.price;});
 
- if(isAdmin && smsList.length>0){
-  box.style.display="block";
-  box.innerHTML="<b>📩 오늘 문자 대상</b><br><br>";
-
-  smsList.forEach(obj=>{
-    box.innerHTML+=`
-      <div style="margin-bottom:8px;">
-        ${obj.s.name}
-        <button onclick='sendSMS(${JSON.stringify(obj.s)}, \`${obj.msg}\`)'>보내기</button>
-      </div>`;
-  });
-
- }else{
-  box.style.display="none";
+  dashboard.innerHTML=`📊 이번달 매출: ${total}원`;
  }
-}
 
-function deleteStudent(i){
- if(!confirm("삭제?")) return;
- students.splice(i,1);
- save();
+ // 문자 리스트
+ if(isAdmin && smsList.length){
+  smsBox.innerHTML="<b>문자 대상</b><br>"+smsList.map(x=>x.s.name).join(", ");
+ }else smsBox.innerHTML="";
 }
 </script>
 </body>
