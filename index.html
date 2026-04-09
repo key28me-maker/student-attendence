@@ -15,19 +15,14 @@ button { padding:10px 14px; border:none; border-radius:10px; background:#f3a4b0;
 
 .student { background:white; padding:20px; margin-bottom:10px; border-radius:15px; display:flex; justify-content:space-between;}
 .left { display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
-.memo { font-size:0.7em; color:#666;}
 
 .adminBtn { position:fixed; bottom:20px; right:20px; background:#333;}
 
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
 @keyframes glow {50%{box-shadow:0 0 20px #fff}}
 
-.chart {background:white; padding:15px; border-radius:15px; margin-top:10px;}
-.bar {height:20px; background:#f3a4b0; margin:5px 0;}
-
 .modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
 .box {background:white;padding:20px;border-radius:15px;width:90%;max-width:450px; max-height:80vh; overflow:auto;}
-.log {font-size:0.8em; border-top:1px solid #ddd; margin-top:10px; padding-top:10px;}
 </style>
 </head>
 
@@ -46,11 +41,13 @@ button { padding:10px 14px; border:none; border-radius:10px; background:#f3a4b0;
 <input id="priceInput" placeholder="금액">
 <button onclick="addStudent()">추가</button>
 
+<button onclick="showToday()">오늘출석</button>
+<button onclick="pickDate()">날짜조회</button>
+
 <input type="month" id="monthPicker">
 <button onclick="showMonthSales()">월매출</button>
 </div>
 
-<div id="chartBox"></div>
 <div id="list"></div>
 
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
@@ -75,6 +72,7 @@ let students=[], history={}, sales=[], isAdmin=false;
 
 function today(){return new Date().toISOString().split("T")[0];}
 
+// 데이터
 db.ref("data").on("value",snap=>{
  const v=snap.val();
  if(v){
@@ -89,6 +87,7 @@ function save(){
  db.ref("data").update({students,history,sales});
 }
 
+// 관리자
 function toggleAdmin(){
  if(prompt("비밀번호")==="1234"){
   isAdmin=!isAdmin;
@@ -97,6 +96,7 @@ function toggleAdmin(){
  }
 }
 
+// 학생 추가
 function addStudent(){
  students.push({
   name:nameInput.value,
@@ -105,18 +105,12 @@ function addStudent(){
   price:+priceInput.value,
   count:4,
   startDate:today(),
-  notified:{},
-  memo:""
+  notified:{}
  });
  save();
 }
 
-function getDaysLeft(s){
- let d=new Date(s.startDate);
- d.setDate(d.getDate()+s.period);
- return Math.ceil((d-new Date())/86400000);
-}
-
+// 출석
 function attend(i){
  if(!confirm("출석하시겠습니까?")) return;
  students[i].count--;
@@ -127,79 +121,76 @@ function attend(i){
  save();
 }
 
-// 🔥 문자 보내기
+// 🔥 오늘 출석 보기
+function showToday(){
+ const list = history[today()]||[];
+ if(list.length===0) return alert("오늘 출석 없음");
+
+ let msg="📅 오늘 출석\n\n";
+ list.forEach(v=>{
+   msg+=v.name+"\n";
+ });
+
+ alert(msg);
+}
+
+// 🔥 날짜 조회
+function pickDate(){
+ const d=prompt("날짜 입력 (2026-04-09)");
+ if(!d) return;
+
+ const list = history[d]||[];
+ if(list.length===0) return alert("출석 없음");
+
+ let msg="📅 "+d+"\n\n";
+ list.forEach(v=>{
+   msg+=v.name+"\n";
+ });
+
+ alert(msg);
+}
+
+// 문자
 function sendSMS(i,key,msg){
- const s = students[i];
- location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
- s.notified = s.notified || {};
- s.notified[key]=true;
+ location.href=`sms:${students[i].phone}?body=${encodeURIComponent(msg)}`;
+ students[i].notified[key]=true;
  save();
 }
 
 // 결제
 function resetStudent(i){
- sales.push({
-   id: Date.now(),
-   name:students[i].name,
-   price:students[i].price,
-   date:today()
- });
+ sales.push({name:students[i].name,price:students[i].price,date:today()});
  students[i].count=4;
  students[i].startDate=today();
  students[i].notified={};
  save();
 }
 
-// 🔥 렌더 (문자 버튼 복구 핵심)
+// 렌더
 function render(){
-
  list.innerHTML="";
 
  const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 
  sorted.forEach(s=>{
   const i=students.findIndex(x=>x.name===s.name);
-  const d=getDaysLeft(s);
-
-  let btn="";
-
-  if(isAdmin){
-
-    if(s.count<=0 && !s.notified?.zero){
-      const msg=`<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
-      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"zero",\`${msg}\`)'>문자</button>`;
-    }
-
-    if(d<=15 && !s.notified?.["15"]){
-      const msg=`안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다 😀`;
-      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"15",\`${msg}\`)'>문자</button>`;
-    }
-
-    if(d<=7 && !s.notified?.["7"]){
-      const msg=`안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다 😀`;
-      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"7",\`${msg}\`)'>문자</button>`;
-    }
-
-    if(d<=3 && !s.notified?.["3"]){
-      const msg=`안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다 😀`;
-      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"3",\`${msg}\`)'>문자</button>`;
-    }
-  }
 
   list.innerHTML+=`
   <div class="student">
     <div class="left">
       <b>${s.name}</b>
       <span>${s.count}회</span>
-      <span>${d}일</span>
     </div>
     <div>
       <button onclick="attend(${i})">출석</button>
-      ${btn}
       ${isAdmin?`<button onclick="resetStudent(${i})">결제</button>`:""}
     </div>
   </div>`;
  });
+}
+
+function closeModal(e){
+ if(e.target.id==="modal") modal.style.display="none";
 }
 </script>
 </body>
