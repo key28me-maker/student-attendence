@@ -72,11 +72,9 @@ firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
 let students=[], history={}, sales=[], isAdmin=false;
-let lastDetailName="";
 
 function today(){return new Date().toISOString().split("T")[0];}
 
-// 데이터
 db.ref("data").on("value",snap=>{
  const v=snap.val();
  if(v){
@@ -91,16 +89,14 @@ function save(){
  db.ref("data").update({students,history,sales});
 }
 
-// 관리자
 function toggleAdmin(){
- if(prompt("비밀번호")==="1941"){
+ if(prompt("비밀번호")==="1234"){
   isAdmin=!isAdmin;
   adminPanel.style.display=isAdmin?"flex":"none";
   render();
  }
 }
 
-// 학생 추가
 function addStudent(){
  students.push({
   name:nameInput.value,
@@ -115,14 +111,12 @@ function addStudent(){
  save();
 }
 
-// 남은일수
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
  return Math.ceil((d-new Date())/86400000);
 }
 
-// 출석
 function attend(i){
  if(!confirm("출석하시겠습니까?")) return;
  students[i].count--;
@@ -130,6 +124,15 @@ function attend(i){
  history[today()].push({name:students[i].name});
  dingSound.currentTime=0;
  dingSound.play().catch(()=>{});
+ save();
+}
+
+// 🔥 문자 보내기
+function sendSMS(i,key,msg){
+ const s = students[i];
+ location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
+ s.notified = s.notified || {};
+ s.notified[key]=true;
  save();
 }
 
@@ -147,45 +150,10 @@ function resetStudent(i){
  save();
 }
 
-// 월매출
-function showMonthSales(){
- const val=monthPicker.value;
- if(!val) return alert("월 선택");
-
- let total=0, map={};
-
- sales.forEach(s=>{
-  if(s.date.startsWith(val)){
-    total+=Number(s.price||0);
-    map[s.name]=(map[s.name]||0)+Number(s.price||0);
-  }
- });
-
- let html=`<div class="chart"><h3>${val} 매출: ${total.toLocaleString()}원</h3>`;
- for(let n in map){
-  html+=`${n} (${map[n]})<div class="bar" style="width:${map[n]/1000}px"></div>`;
- }
- html+=`</div>`;
- chartBox.innerHTML=html;
-}
-
-// 🔥 렌더
+// 🔥 렌더 (문자 버튼 복구 핵심)
 function render(){
 
  list.innerHTML="";
-
- if(isAdmin){
-  const ym=new Date().toISOString().slice(0,7);
-  let total=0;
-
-  sales.forEach(s=>{
-    if(s.date.startsWith(ym)){
-      total+=Number(s.price||0);
-    }
-  });
-
-  dashboard.innerHTML=`📊 이번달 매출: ${total.toLocaleString()}원`;
- }
 
  const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 
@@ -193,104 +161,45 @@ function render(){
   const i=students.findIndex(x=>x.name===s.name);
   const d=getDaysLeft(s);
 
+  let btn="";
+
+  if(isAdmin){
+
+    if(s.count<=0 && !s.notified?.zero){
+      const msg=`<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
+      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"zero",\`${msg}\`)'>문자</button>`;
+    }
+
+    if(d<=15 && !s.notified?.["15"]){
+      const msg=`안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다 😀`;
+      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"15",\`${msg}\`)'>문자</button>`;
+    }
+
+    if(d<=7 && !s.notified?.["7"]){
+      const msg=`안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다 😀`;
+      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"7",\`${msg}\`)'>문자</button>`;
+    }
+
+    if(d<=3 && !s.notified?.["3"]){
+      const msg=`안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다 😀`;
+      btn+=`<button class="smsFlash" onclick='sendSMS(${i},"3",\`${msg}\`)'>문자</button>`;
+    }
+  }
+
   list.innerHTML+=`
   <div class="student">
-    <div class="left" onclick="showDetail('${s.name}')">
+    <div class="left">
       <b>${s.name}</b>
       <span>${s.count}회</span>
       <span>${d}일</span>
-      ${isAdmin && s.memo?`<span class="memo">📝 ${s.memo}</span>`:""}
     </div>
     <div>
       <button onclick="attend(${i})">출석</button>
+      ${btn}
       ${isAdmin?`<button onclick="resetStudent(${i})">결제</button>`:""}
     </div>
   </div>`;
  });
-}
-
-// 🔥 상세 (출석 + 결제 로그)
-function showDetail(name){
- if(!isAdmin) return;
- lastDetailName=name;
-
- const s=students.find(x=>x.name===name);
-
- // 출석 로그
- let attendLogs=[];
- for(let d in history){
-  history[d].forEach(v=>{
-    if(v.name===name){
-      attendLogs.push(d);
-    }
-  });
- }
- attendLogs.sort().reverse();
-
- let attendHtml="<div class='log'><b>출석 기록</b><br>";
- if(attendLogs.length===0){
-   attendHtml+="없음";
- } else {
-   attendLogs.forEach(d=>{
-     attendHtml+=d+"<br>";
-   });
- }
- attendHtml+="</div>";
-
- // 결제 로그
- const logs = sales.filter(v=>v.name===name).sort((a,b)=>b.date.localeCompare(a.date));
-
- let payHtml="<div class='log'><b>결제 기록</b><br>";
- if(logs.length===0){
-   payHtml+="없음";
- } else {
-   logs.forEach(v=>{
-     payHtml+=`${v.date} / ${Number(v.price).toLocaleString()}원
-     <button onclick="deleteSale(${v.id})">삭제</button><br>`;
-   });
- }
- payHtml+="</div>";
-
- modalBox.innerHTML=`
-  ${name}<br><br>
-
-  전화번호<br><input id="p" value="${s.phone}"><br>
-  횟수<br><input id="c" value="${s.count}"><br>
-  기간<br><input id="pe" value="${s.period}"><br>
-  금액<br><input id="pr" value="${s.price}"><br>
-  메모<br><textarea id="m">${s.memo||""}</textarea><br>
-
-  <button onclick="saveEdit('${name}')">저장</button>
-
-  ${attendHtml}
-  ${payHtml}
- `;
-
- modal.style.display="flex";
-}
-
-// 결제 삭제
-function deleteSale(id){
- if(!confirm("삭제?")) return;
- sales=sales.filter(s=>s.id!==id);
- save();
- showDetail(lastDetailName);
-}
-
-// 수정
-function saveEdit(name){
- const s=students.find(x=>x.name===name);
- s.phone=p.value;
- s.count=+c.value;
- s.period=+pe.value;
- s.price=+pr.value;
- s.memo=m.value;
- save();
- modal.style.display="none";
-}
-
-function closeModal(e){
- if(e.target.id==="modal") modal.style.display="none";
 }
 </script>
 </body>
