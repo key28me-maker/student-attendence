@@ -72,6 +72,7 @@ firebase.initializeApp(firebaseConfig);
 const db=firebase.database();
 
 let students=[], history={}, sales=[], isAdmin=false;
+let lastDetailName="";
 
 function today(){return new Date().toISOString().split("T")[0];}
 
@@ -132,18 +133,10 @@ function attend(i){
  save();
 }
 
-// 문자
-function sendSMS(i,key,msg){
- location.href=`sms:${students[i].phone}?body=${encodeURIComponent(msg)}`;
- students[i].notified = students[i].notified || {};
- students[i].notified[key]=true;
- save();
-}
-
 // 결제
 function resetStudent(i){
  sales.push({
-   id: Date.now(), // 🔥 고유 id 추가
+   id: Date.now(),
    name:students[i].name,
    price:students[i].price,
    date:today()
@@ -151,21 +144,6 @@ function resetStudent(i){
  students[i].count=4;
  students[i].startDate=today();
  students[i].notified={};
- save();
-}
-
-// 🔥 결제기록 삭제
-function deleteSale(id){
- if(!confirm("이 결제 삭제할까?")) return;
- sales = sales.filter(s=>s.id !== id);
- save();
- showDetail(lastDetailName);
-}
-
-// 학생 삭제
-function deleteStudent(name){
- if(!confirm(name+" 삭제할까?")) return;
- students = students.filter(s=>s.name!==name);
  save();
 }
 
@@ -191,8 +169,9 @@ function showMonthSales(){
  chartBox.innerHTML=html;
 }
 
-// 🔥 이번달 매출 표시
+// 🔥 렌더
 function render(){
+
  list.innerHTML="";
 
  if(isAdmin){
@@ -230,32 +209,47 @@ function render(){
  });
 }
 
-let lastDetailName="";
-
-// 상세 (결제기록 포함)
+// 🔥 상세 (출석 + 결제 로그)
 function showDetail(name){
  if(!isAdmin) return;
  lastDetailName=name;
 
  const s=students.find(x=>x.name===name);
- const logs = sales
-   .filter(v=>v.name===name)
-   .sort((a,b)=>b.date.localeCompare(a.date));
 
- let logHtml = "<div class='log'><b>결제 기록</b><br>";
+ // 출석 로그
+ let attendLogs=[];
+ for(let d in history){
+  history[d].forEach(v=>{
+    if(v.name===name){
+      attendLogs.push(d);
+    }
+  });
+ }
+ attendLogs.sort().reverse();
 
- if(logs.length===0){
-   logHtml += "없음";
+ let attendHtml="<div class='log'><b>출석 기록</b><br>";
+ if(attendLogs.length===0){
+   attendHtml+="없음";
  } else {
-   logs.forEach(v=>{
-     logHtml += `
-       ${v.date} / ${Number(v.price).toLocaleString()}원
-       <button onclick="deleteSale(${v.id})">삭제</button><br>
-     `;
+   attendLogs.forEach(d=>{
+     attendHtml+=d+"<br>";
    });
  }
+ attendHtml+="</div>";
 
- logHtml += "</div>";
+ // 결제 로그
+ const logs = sales.filter(v=>v.name===name).sort((a,b)=>b.date.localeCompare(a.date));
+
+ let payHtml="<div class='log'><b>결제 기록</b><br>";
+ if(logs.length===0){
+   payHtml+="없음";
+ } else {
+   logs.forEach(v=>{
+     payHtml+=`${v.date} / ${Number(v.price).toLocaleString()}원
+     <button onclick="deleteSale(${v.id})">삭제</button><br>`;
+   });
+ }
+ payHtml+="</div>";
 
  modalBox.innerHTML=`
   ${name}<br><br>
@@ -267,12 +261,20 @@ function showDetail(name){
   메모<br><textarea id="m">${s.memo||""}</textarea><br>
 
   <button onclick="saveEdit('${name}')">저장</button>
-  <button onclick="deleteStudent('${name}')">삭제</button>
 
-  ${logHtml}
+  ${attendHtml}
+  ${payHtml}
  `;
 
  modal.style.display="flex";
+}
+
+// 결제 삭제
+function deleteSale(id){
+ if(!confirm("삭제?")) return;
+ sales=sales.filter(s=>s.id!==id);
+ save();
+ showDetail(lastDetailName);
 }
 
 // 수정
