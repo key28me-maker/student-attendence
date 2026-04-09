@@ -10,10 +10,10 @@ body { font-family:sans-serif; background:#c1e5d2; padding:30px; font-size:1.5em
 h1 { text-align:center; }
 
 .top { display:flex; gap:15px; margin-bottom:15px;}
-input { flex:1; padding:18px;}
+input, textarea { flex:1; padding:18px;}
 button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0; color:white;}
 .student { background:white; padding:25px; margin-bottom:15px; border-radius:15px; display:flex; justify-content:space-between; align-items:center;}
-.left { display:flex; gap:20px; align-items:center;}
+.left { display:flex; gap:15px; align-items:center; flex-wrap:wrap;}
 .adminBtn { position:fixed; bottom:20px; right:20px; background:#333;}
 
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
@@ -21,6 +21,11 @@ button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0;
   0%{box-shadow:0 0 0}
   50%{box-shadow:0 0 20px #fff}
   100%{box-shadow:0 0 0}
+}
+
+.memo {
+  font-size:0.75em;
+  color:#666;
 }
 
 .modal {
@@ -102,6 +107,7 @@ function toggleAdmin(){
  }
 }
 
+// 학생 추가
 function addStudent(){
  const name=nameInput.value.trim();
  const phone=phoneInput.value.trim();
@@ -115,12 +121,14 @@ function addStudent(){
   period, price,
   count:4,
   startDate:today(),
-  notified:{}
+  notified:{},
+  memo:"" // 🔥 메모 추가
  });
 
  save();
 }
 
+// 남은 일수
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
@@ -168,7 +176,7 @@ function deleteStudent(name){
  save();
 }
 
-// 상세 수정
+// 상세 수정 (메모 포함)
 function showStudentDetail(name){
  if(!isAdmin) return;
 
@@ -189,6 +197,9 @@ function showStudentDetail(name){
   수강료<br>
   <input id="editPrice" value="${s.price}"><br><br>
 
+  메모<br>
+  <textarea id="editMemo">${s.memo||""}</textarea><br><br>
+
   <button onclick="saveEdit('${name}')">저장</button>
   <button onclick="deleteStudent('${name}')">삭제</button>
  `;
@@ -203,6 +214,7 @@ function saveEdit(name){
  s.count = Number(document.getElementById("editCount").value);
  s.period = Number(document.getElementById("editPeriod").value);
  s.price = Number(document.getElementById("editPrice").value);
+ s.memo = document.getElementById("editMemo").value; // 🔥 메모 저장
 
  save();
  modal.style.display="none";
@@ -213,7 +225,7 @@ function closeModal(e){
  if(e.target.id==="modal") modal.style.display="none";
 }
 
-// 렌더링
+// 렌더
 function render(){
  const list=document.getElementById("list");
  list.innerHTML="";
@@ -221,36 +233,29 @@ function render(){
  const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 
  sorted.forEach((s)=>{
-  // 🔥 핵심 수정 (index 안정화)
   const i = students.findIndex(x => x.name === s.name);
-
   const d=getDaysLeft(s);
+
   let btn="";
 
-if(isAdmin){
-
-  // 🔥 횟수 0 우선
-  if(s.count <= 0 && !s.notified?.["zero"]){
-    const msg = `<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔 편한 시간에 예약 주시면 감사하겠습니다.`;
-    btn=`<button class="smsFlash" onclick='sendSMS(${i},"zero",\`${msg}\`)'>문자</button>`;
+  if(isAdmin){
+    if(s.count<=0 && !s.notified?.["zero"]){
+      const msg = `<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
+      btn=`<button class="smsFlash" onclick='sendSMS(${i},"zero",\`${msg}\`)'>문자</button>`;
+    }
+    else if(d<=15 && !s.notified?.["15"]){
+      const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
+      btn=`<button class="smsFlash" onclick='sendSMS(${i},"15",\`${msg}\`)'>문자</button>`;
+    }
+    else if(d<=7 && !s.notified?.["7"]){
+      const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
+      btn=`<button class="smsFlash" onclick='sendSMS(${i},"7",\`${msg}\`)'>문자</button>`;
+    }
+    else if(d<=3 && !s.notified?.["3"]){
+      const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다. 😀 빠른 시일내 방문 주세요!`;
+      btn=`<button class="smsFlash" onclick='sendSMS(${i},"3",\`${msg}\`)'>문자</button>`;
+    }
   }
-
-  else if(d<=15 && !s.notified?.["15"]){
-    const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
-    btn=`<button class="smsFlash" onclick='sendSMS(${i},"15",\`${msg}\`)'>문자</button>`;
-  }
-
-  else if(d<=7 && !s.notified?.["7"]){
-    const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
-    btn=`<button class="smsFlash" onclick='sendSMS(${i},"7",\`${msg}\`)'>문자</button>`;
-  }
-
-  else if(d<=3 && !s.notified?.["3"]){
-    const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다. 😀 빠른 시일내 방문 주세요!`;
-    btn=`<button class="smsFlash" onclick='sendSMS(${i},"3",\`${msg}\`)'>문자</button>`;
-  }
-
-}
 
   list.innerHTML+=`
   <div class="student">
@@ -258,6 +263,7 @@ if(isAdmin){
       <b>${s.name}</b>
       <span>${s.count}회</span>
       <span>${d}일</span>
+      ${s.memo ? `<span class="memo">📝 ${s.memo}</span>` : ""}
     </div>
     <div>
       <button onclick="attend(${i})">출석</button>
