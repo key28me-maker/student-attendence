@@ -227,17 +227,20 @@ function render(){
   const d=getDaysLeft(s);
   let btn="";
 
-  if(isAdmin){
-    if(d<=15 && !s.notified?.["15"]){
-      btn=`<button class="smsFlash" onclick='sendSMS(${i},"15","안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다. ")'>문자</button>`;
-    }
-    else if(d<=7 && !s.notified?.["7"]){
-      btn=`<button class="smsFlash" onclick='sendSMS(${i},"7","안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다. ")'>문자</button>`;
-    }
-    else if(d<=3 && !s.notified?.["3"]){
-      btn=`<button class="smsFlash" onclick='sendSMS(${i},"3","안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다. 😀 빠른 시일내 방문 주세요!")'>문자</button>`;
-    }
+ if(isAdmin){
+  if(d<=15 && !s.notified?.["15"]){
+    const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
+    btn=`<button class="smsFlash" onclick='sendSMS(${i},"15",\`${msg}\`)'>문자</button>`;
   }
+  else if(d<=7 && !s.notified?.["7"]){
+    const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
+    btn=`<button class="smsFlash" onclick='sendSMS(${i},"7",\`${msg}\`)'>문자</button>`;
+  }
+  else if(d<=3 && !s.notified?.["3"]){
+    const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다. 😀 빠른 시일내 방문 주세요!`;
+    btn=`<button class="smsFlash" onclick='sendSMS(${i},"3",\`${msg}\`)'>문자</button>`;
+  }
+}
 
   list.innerHTML+=`
   <div class="student">
