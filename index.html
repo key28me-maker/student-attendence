@@ -11,7 +11,7 @@ h1 { text-align:center; }
 
 .top { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;}
 input, textarea { padding:15px;}
-button { padding:12px 18px; border:none; border-radius:10px; background:#f3a4b0; color:white;}
+button { padding:10px 14px; border:none; border-radius:10px; background:#f3a4b0; color:white;}
 
 .student { background:white; padding:20px; margin-bottom:10px; border-radius:15px; display:flex; justify-content:space-between;}
 .left { display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
@@ -26,7 +26,7 @@ button { padding:12px 18px; border:none; border-radius:10px; background:#f3a4b0;
 .bar {height:20px; background:#f3a4b0; margin:5px 0;}
 
 .modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
-.box {background:white;padding:20px;border-radius:15px;width:90%;max-width:400px; max-height:80vh; overflow:auto;}
+.box {background:white;padding:20px;border-radius:15px;width:90%;max-width:450px; max-height:80vh; overflow:auto;}
 .log {font-size:0.8em; border-top:1px solid #ddd; margin-top:10px; padding-top:10px;}
 </style>
 </head>
@@ -75,6 +75,7 @@ let students=[], history={}, sales=[], isAdmin=false;
 
 function today(){return new Date().toISOString().split("T")[0];}
 
+// 데이터
 db.ref("data").on("value",snap=>{
  const v=snap.val();
  if(v){
@@ -89,6 +90,7 @@ function save(){
  db.ref("data").update({students,history,sales});
 }
 
+// 관리자
 function toggleAdmin(){
  if(prompt("비밀번호")==="1234"){
   isAdmin=!isAdmin;
@@ -97,6 +99,7 @@ function toggleAdmin(){
  }
 }
 
+// 학생 추가
 function addStudent(){
  students.push({
   name:nameInput.value,
@@ -111,38 +114,128 @@ function addStudent(){
  save();
 }
 
+// 남은일수
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
  return Math.ceil((d-new Date())/86400000);
 }
 
+// 출석
 function attend(i){
  if(!confirm("출석하시겠습니까?")) return;
  students[i].count--;
  history[today()] = history[today()]||[];
  history[today()].push({name:students[i].name});
+ dingSound.currentTime=0;
  dingSound.play().catch(()=>{});
  save();
 }
 
+// 문자
 function sendSMS(i,key,msg){
  location.href=`sms:${students[i].phone}?body=${encodeURIComponent(msg)}`;
+ students[i].notified = students[i].notified || {};
  students[i].notified[key]=true;
  save();
 }
 
+// 결제
 function resetStudent(i){
- sales.push({name:students[i].name,price:students[i].price,date:today()});
+ sales.push({
+   id: Date.now(), // 🔥 고유 id 추가
+   name:students[i].name,
+   price:students[i].price,
+   date:today()
+ });
  students[i].count=4;
  students[i].startDate=today();
  students[i].notified={};
  save();
 }
 
-// 🔥 결제 로그 포함 상세
+// 🔥 결제기록 삭제
+function deleteSale(id){
+ if(!confirm("이 결제 삭제할까?")) return;
+ sales = sales.filter(s=>s.id !== id);
+ save();
+ showDetail(lastDetailName);
+}
+
+// 학생 삭제
+function deleteStudent(name){
+ if(!confirm(name+" 삭제할까?")) return;
+ students = students.filter(s=>s.name!==name);
+ save();
+}
+
+// 월매출
+function showMonthSales(){
+ const val=monthPicker.value;
+ if(!val) return alert("월 선택");
+
+ let total=0, map={};
+
+ sales.forEach(s=>{
+  if(s.date.startsWith(val)){
+    total+=Number(s.price||0);
+    map[s.name]=(map[s.name]||0)+Number(s.price||0);
+  }
+ });
+
+ let html=`<div class="chart"><h3>${val} 매출: ${total.toLocaleString()}원</h3>`;
+ for(let n in map){
+  html+=`${n} (${map[n]})<div class="bar" style="width:${map[n]/1000}px"></div>`;
+ }
+ html+=`</div>`;
+ chartBox.innerHTML=html;
+}
+
+// 🔥 이번달 매출 표시
+function render(){
+ list.innerHTML="";
+
+ if(isAdmin){
+  const ym=new Date().toISOString().slice(0,7);
+  let total=0;
+
+  sales.forEach(s=>{
+    if(s.date.startsWith(ym)){
+      total+=Number(s.price||0);
+    }
+  });
+
+  dashboard.innerHTML=`📊 이번달 매출: ${total.toLocaleString()}원`;
+ }
+
+ const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+
+ sorted.forEach(s=>{
+  const i=students.findIndex(x=>x.name===s.name);
+  const d=getDaysLeft(s);
+
+  list.innerHTML+=`
+  <div class="student">
+    <div class="left" onclick="showDetail('${s.name}')">
+      <b>${s.name}</b>
+      <span>${s.count}회</span>
+      <span>${d}일</span>
+      ${isAdmin && s.memo?`<span class="memo">📝 ${s.memo}</span>`:""}
+    </div>
+    <div>
+      <button onclick="attend(${i})">출석</button>
+      ${isAdmin?`<button onclick="resetStudent(${i})">결제</button>`:""}
+    </div>
+  </div>`;
+ });
+}
+
+let lastDetailName="";
+
+// 상세 (결제기록 포함)
 function showDetail(name){
  if(!isAdmin) return;
+ lastDetailName=name;
 
  const s=students.find(x=>x.name===name);
  const logs = sales
@@ -155,7 +248,10 @@ function showDetail(name){
    logHtml += "없음";
  } else {
    logs.forEach(v=>{
-     logHtml += `${v.date} / ${Number(v.price).toLocaleString()}원<br>`;
+     logHtml += `
+       ${v.date} / ${Number(v.price).toLocaleString()}원
+       <button onclick="deleteSale(${v.id})">삭제</button><br>
+     `;
    });
  }
 
@@ -164,15 +260,14 @@ function showDetail(name){
  modalBox.innerHTML=`
   ${name}<br><br>
 
-  <input id="p" value="${s.phone}"><br>
-  <input id="c" value="${s.count}"><br>
-  <input id="pe" value="${s.period}"><br>
-  <input id="pr" value="${s.price}"><br>
-  <textarea id="m">${s.memo||""}</textarea><br>
+  전화번호<br><input id="p" value="${s.phone}"><br>
+  횟수<br><input id="c" value="${s.count}"><br>
+  기간<br><input id="pe" value="${s.period}"><br>
+  금액<br><input id="pr" value="${s.price}"><br>
+  메모<br><textarea id="m">${s.memo||""}</textarea><br>
 
   <button onclick="saveEdit('${name}')">저장</button>
   <button onclick="deleteStudent('${name}')">삭제</button>
-  <button onclick="cancelPayment('${name}')">결제취소</button>
 
   ${logHtml}
  `;
@@ -180,21 +275,7 @@ function showDetail(name){
  modal.style.display="flex";
 }
 
-// 나머지 기존 코드 그대로 유지 (삭제/결제취소/렌더 등 동일)
-
-function deleteStudent(name){
- if(!confirm(name+" 삭제할까?")) return;
- students = students.filter(s=>s.name!==name);
- save();
-}
-
-function cancelPayment(name){
- const idx = sales.slice().reverse().findIndex(s=>s.name===name);
- if(idx===-1) return alert("결제기록 없음");
- sales.splice(sales.length-1-idx,1);
- save();
-}
-
+// 수정
 function saveEdit(name){
  const s=students.find(x=>x.name===name);
  s.phone=p.value;
@@ -208,30 +289,6 @@ function saveEdit(name){
 
 function closeModal(e){
  if(e.target.id==="modal") modal.style.display="none";
-}
-
-function render(){
- list.innerHTML="";
- const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-
- sorted.forEach(s=>{
-  const i=students.findIndex(x=>x.name===s.name);
-  const d=getDaysLeft(s);
-
-  list.innerHTML+=`
-  <div class="student">
-    <div class="left" onclick="showDetail('${s.name}')">
-      <b>${s.name}</b>
-      <span>${s.count}회</span>
-      <span>${d}일</span>
-      ${s.memo?`<span class="memo">📝 ${s.memo}</span>`:""}
-    </div>
-    <div>
-      <button onclick="attend(${i})">출석</button>
-      ${isAdmin?`<button onclick="resetStudent(${i})">결제</button>`:""}
-    </div>
-  </div>`;
- });
 }
 </script>
 </body>
