@@ -9,34 +9,24 @@
 body { font-family:sans-serif; background:#c1e5d2; padding:30px; font-size:1.5em;}
 h1 { text-align:center; }
 
-.top { display:flex; gap:15px; margin-bottom:15px;}
-input, textarea { flex:1; padding:18px;}
-button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0; color:white;}
-.student { background:white; padding:25px; margin-bottom:15px; border-radius:15px; display:flex; justify-content:space-between; align-items:center;}
-.left { display:flex; gap:15px; align-items:center; flex-wrap:wrap;}
+.top { display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;}
+input, textarea { padding:15px;}
+button { padding:12px 18px; border:none; border-radius:10px; background:#f3a4b0; color:white;}
+
+.student { background:white; padding:20px; margin-bottom:10px; border-radius:15px; display:flex; justify-content:space-between;}
+.left { display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+.memo { font-size:0.7em; color:#666;}
+
 .adminBtn { position:fixed; bottom:20px; right:20px; background:#333;}
 
 .smsFlash { animation: glow 1s infinite; background:#ff6b6b;}
-@keyframes glow {
-  0%{box-shadow:0 0 0}
-  50%{box-shadow:0 0 20px #fff}
-  100%{box-shadow:0 0 0}
-}
+@keyframes glow {50%{box-shadow:0 0 20px #fff}}
 
-.memo {
-  font-size:0.75em;
-  color:#666;
-}
+.chart {background:white; padding:15px; border-radius:15px; margin-top:10px;}
+.bar {height:20px; background:#f3a4b0; margin:5px 0;}
 
-.modal {
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.5);
-  display:none;justify-content:center;align-items:center;
-}
-.box {
-  background:white;padding:30px;border-radius:15px;
-  width:90%;max-width:500px;
-}
+.modal {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
+.box {background:white;padding:20px;border-radius:15px;width:90%;max-width:400px;}
 </style>
 </head>
 
@@ -46,15 +36,22 @@ button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0;
 
 <audio id="dingSound" src="dingdong.mp3"></audio>
 
+<div id="dashboard"></div>
+
 <div class="top" id="adminPanel" style="display:none;">
-<input id="nameInput" placeholder="학생 이름">
+<input id="nameInput" placeholder="이름">
 <input id="phoneInput" placeholder="전화번호">
-<input id="periodInput" placeholder="기간(일)">
-<input id="priceInput" placeholder="수강료">
+<input id="periodInput" placeholder="기간">
+<input id="priceInput" placeholder="금액">
 <button onclick="addStudent()">추가</button>
+
+<input type="month" id="monthPicker">
+<button onclick="showMonthSales()">월매출</button>
 </div>
 
+<div id="chartBox"></div>
 <div id="list"></div>
+
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
 <div class="modal" id="modal" onclick="closeModal(event)">
@@ -66,10 +63,8 @@ button { padding:15px 20px; border:none; border-radius:10px; background:#f3a4b0;
 
 <script>
 const firebaseConfig = {
-  apiKey:"AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
-  authDomain:"student-attendence-e9f58.firebaseapp.com",
-  databaseURL:"https://student-attendence-e9f58-default-rtdb.firebaseio.com",
-  projectId:"student-attendence-e9f58"
+ apiKey:"AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
+ databaseURL:"https://student-attendence-e9f58-default-rtdb.firebaseio.com"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -79,7 +74,7 @@ let students=[], history={}, sales=[], isAdmin=false;
 
 function today(){return new Date().toISOString().split("T")[0];}
 
-// 데이터 불러오기
+// 데이터
 db.ref("data").on("value",snap=>{
  const v=snap.val();
  if(v){
@@ -90,180 +85,137 @@ db.ref("data").on("value",snap=>{
  render();
 });
 
-// 🔥 안전 저장
 function save(){
- db.ref("data").update({
-  students: students || [],
-  history: history || {},
-  sales: sales || []
- });
+ db.ref("data").update({students,history,sales});
 }
 
 function toggleAdmin(){
  if(prompt("비밀번호")==="1234"){
   isAdmin=!isAdmin;
-  document.getElementById("adminPanel").style.display=isAdmin?"flex":"none";
+  adminPanel.style.display=isAdmin?"flex":"none";
   render();
  }
 }
 
-// 학생 추가
 function addStudent(){
- const name=nameInput.value.trim();
- const phone=phoneInput.value.trim();
- const period=+periodInput.value;
- const price=+priceInput.value;
-
- if(!name||!phone||!period||!price) return alert("입력 부족");
-
  students.push({
-  name, phone,
-  period, price,
+  name:nameInput.value,
+  phone:phoneInput.value,
+  period:+periodInput.value,
+  price:+priceInput.value,
   count:4,
   startDate:today(),
   notified:{},
-  memo:"" // 🔥 메모 추가
+  memo:""
  });
-
  save();
 }
 
-// 남은 일수
 function getDaysLeft(s){
  let d=new Date(s.startDate);
  d.setDate(d.getDate()+s.period);
- return Math.ceil((d-new Date())/(1000*60*60*24));
+ return Math.ceil((d-new Date())/86400000);
 }
 
-// 출석
 function attend(i){
  if(!confirm("출석하시겠습니까?")) return;
-
- history[today()] = history[today()] || [];
- history[today()].push({name:students[i].name});
-
  students[i].count--;
-
- const sound=document.getElementById("dingSound");
- sound.currentTime=0;
- sound.play().catch(()=>{});
-
+ history[today()] = history[today()]||[];
+ history[today()].push({name:students[i].name});
+ dingSound.play().catch(()=>{});
  save();
 }
 
-// 문자
-function sendSMS(i,step,msg){
- const s = students[i];
- location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
- s.notified[step]=true;
+function sendSMS(i,key,msg){
+ location.href=`sms:${students[i].phone}?body=${encodeURIComponent(msg)}`;
+ students[i].notified[key]=true;
  save();
 }
 
-// 결제
 function resetStudent(i){
- const s=students[i];
- sales.push({name:s.name,price:s.price,date:today()});
- s.count=4;
- s.startDate=today();
- s.notified={};
+ sales.push({name:students[i].name,price:students[i].price,date:today()});
+ students[i].count=4;
+ students[i].startDate=today();
+ students[i].notified={};
  save();
 }
 
-// 삭제
-function deleteStudent(name){
- if(!confirm(name+" 삭제할까?")) return;
- students = students.filter(s=>s.name!==name);
- save();
+// 🔥 월매출 + 그래프
+function showMonthSales(){
+ const val=monthPicker.value;
+ if(!val) return alert("월 선택");
+
+ let total=0;
+ let map={};
+
+ sales.forEach(s=>{
+  if(s.date.startsWith(val)){
+    total+=s.price;
+    map[s.name]=(map[s.name]||0)+s.price;
+  }
+ });
+
+ let html=`<div class="chart"><h3>${val} 매출: ${total.toLocaleString()}원</h3>`;
+
+ for(let n in map){
+  html+=`${n} (${map[n]})<div class="bar" style="width:${map[n]/1000}px"></div>`;
+ }
+
+ html+=`</div>`;
+ chartBox.innerHTML=html;
 }
 
-// 상세 수정 (메모 포함)
-function showStudentDetail(name){
- if(!isAdmin) return;
-
- const s = students.find(x=>x.name===name);
-
- modalBox.innerHTML=`
-  <h3>${name}</h3>
-
-  전화번호<br>
-  <input id="editPhone" value="${s.phone}"><br><br>
-
-  남은 횟수<br>
-  <input id="editCount" value="${s.count}"><br><br>
-
-  남은 기간(일)<br>
-  <input id="editPeriod" value="${s.period}"><br><br>
-
-  수강료<br>
-  <input id="editPrice" value="${s.price}"><br><br>
-
-  메모<br>
-  <textarea id="editMemo">${s.memo||""}</textarea><br><br>
-
-  <button onclick="saveEdit('${name}')">저장</button>
-  <button onclick="deleteStudent('${name}')">삭제</button>
- `;
-
- modal.style.display="flex";
-}
-
-function saveEdit(name){
- const s = students.find(x=>x.name===name);
-
- s.phone = document.getElementById("editPhone").value;
- s.count = Number(document.getElementById("editCount").value);
- s.period = Number(document.getElementById("editPeriod").value);
- s.price = Number(document.getElementById("editPrice").value);
- s.memo = document.getElementById("editMemo").value; // 🔥 메모 저장
-
- save();
- modal.style.display="none";
- render();
-}
-
-function closeModal(e){
- if(e.target.id==="modal") modal.style.display="none";
-}
-
-// 렌더
 function render(){
- const list=document.getElementById("list");
  list.innerHTML="";
+
+ // 이번달 매출
+ if(isAdmin){
+  const ym=new Date().toISOString().slice(0,7);
+  let total=0;
+  let prev=0;
+
+  sales.forEach(s=>{
+    if(s.date.startsWith(ym)) total+=s.price;
+  });
+
+  const prevMonth = new Date();
+  prevMonth.setMonth(prevMonth.getMonth()-1);
+  const pm=prevMonth.toISOString().slice(0,7);
+
+  sales.forEach(s=>{
+    if(s.date.startsWith(pm)) prev+=s.price;
+  });
+
+  let diff=total-prev;
+  dashboard.innerHTML=`📊 이번달: ${total.toLocaleString()}원 (${diff>=0?"+":""}${diff.toLocaleString()})`;
+ }
 
  const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 
- sorted.forEach((s)=>{
-  const i = students.findIndex(x => x.name === s.name);
+ sorted.forEach(s=>{
+  const i=students.findIndex(x=>x.name===s.name);
   const d=getDaysLeft(s);
 
   let btn="";
 
   if(isAdmin){
-    if(s.count<=0 && !s.notified?.["zero"]){
-      const msg = `<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
+    if(s.count<=0 && !s.notified.zero){
+      const msg=`<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
       btn=`<button class="smsFlash" onclick='sendSMS(${i},"zero",\`${msg}\`)'>문자</button>`;
     }
-    else if(d<=15 && !s.notified?.["15"]){
-      const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 15일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
+    else if(d<=15 && !s.notified["15"]){
+      const msg=`안녕하세요 ${s.name}님 수업횟수 ${s.count}회, 15일 남았습니다`;
       btn=`<button class="smsFlash" onclick='sendSMS(${i},"15",\`${msg}\`)'>문자</button>`;
-    }
-    else if(d<=7 && !s.notified?.["7"]){
-      const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 7일 남았습니다. 😀 편한 시간에 예약 주시면 감사하겠습니다.`;
-      btn=`<button class="smsFlash" onclick='sendSMS(${i},"7",\`${msg}\`)'>문자</button>`;
-    }
-    else if(d<=3 && !s.notified?.["3"]){
-      const msg = `안녕하세요 ${s.name}님 우리 화실의 수업횟수가 ${s.count}회, 사용기한이 3일 남았습니다. 😀 빠른 시일내 방문 주세요!`;
-      btn=`<button class="smsFlash" onclick='sendSMS(${i},"3",\`${msg}\`)'>문자</button>`;
     }
   }
 
   list.innerHTML+=`
   <div class="student">
-    <div class="left" onclick="showStudentDetail('${s.name}')">
+    <div class="left" onclick="showDetail('${s.name}')">
       <b>${s.name}</b>
       <span>${s.count}회</span>
       <span>${d}일</span>
-      ${s.memo ? `<span class="memo">📝 ${s.memo}</span>` : ""}
+      ${s.memo?`<span class="memo">📝 ${s.memo}</span>`:""}
     </div>
     <div>
       <button onclick="attend(${i})">출석</button>
@@ -272,6 +224,38 @@ function render(){
     </div>
   </div>`;
  });
+}
+
+function showDetail(name){
+ if(!isAdmin) return;
+ const s=students.find(x=>x.name===name);
+
+ modalBox.innerHTML=`
+  ${name}<br>
+  <input id="p" value="${s.phone}"><br>
+  <input id="c" value="${s.count}"><br>
+  <input id="pe" value="${s.period}"><br>
+  <input id="pr" value="${s.price}"><br>
+  <textarea id="m">${s.memo||""}</textarea><br>
+  <button onclick="saveEdit('${name}')">저장</button>
+ `;
+
+ modal.style.display="flex";
+}
+
+function saveEdit(name){
+ const s=students.find(x=>x.name===name);
+ s.phone=p.value;
+ s.count=+c.value;
+ s.period=+pe.value;
+ s.price=+pr.value;
+ s.memo=m.value;
+ save();
+ modal.style.display="none";
+}
+
+function closeModal(e){
+ if(e.target.id==="modal") modal.style.display="none";
 }
 </script>
 </body>
