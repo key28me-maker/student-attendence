@@ -8,19 +8,67 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"></script>
 
 <style>
-body{font-family:sans-serif;background:#9fbfaf;}
-h1{text-align:center;margin-top:30px;}
-.card{background:#fff;margin:10px;padding:15px;border-radius:12px;}
-button{margin-left:5px;}
-#adminBtn{position:fixed;bottom:20px;right:20px;}
-#admin{display:none;padding:15px;}
-.smsBtn{background:#ff8f8f;color:#fff;border:none;border-radius:8px;padding:5px 10px;}
+body{
+  font-family:sans-serif;
+  background:#9fbfaf;
+  zoom:2; /* 🔥 전체 2배 */
+}
+
+h1{
+  text-align:center;
+}
+
+.card{
+  background:#fff;
+  margin:10px;
+  padding:15px;
+  border-radius:12px;
+
+  display:flex;
+  align-items:center;
+}
+
+.name{
+  font-weight:bold;
+}
+
+.info{
+  margin-left:10px;
+}
+
+.right{
+  margin-left:auto; /* 🔥 오른쪽 밀기 */
+}
+
+button{
+  margin-left:5px;
+}
+
+#adminBtn{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+}
+
+#admin{
+  display:none;
+  padding:15px;
+}
+
+.smsBtn{
+  background:#ff8f8f;
+  color:white;
+  border:none;
+  border-radius:8px;
+  padding:5px 10px;
+}
 </style>
 </head>
 
 <body>
 
 <h1>Your art studio</h1>
+
 <div id="list"></div>
 
 <button id="adminBtn" onclick="adminLogin()">관리자</button>
@@ -92,13 +140,12 @@ window.attend=function(id){
   });
 }
 
-// 문자 보내기 (핵심)
+// 문자
 window.sendSMS=function(s){
   const remainDays = Math.ceil((s.start + s.days*86400000 - Date.now())/86400000);
 
   const msg = `안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remainDays}일, ${s.count}회 남았습니다.`;
 
-  // 📱 문자앱 열기
   location.href = `sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
@@ -114,18 +161,19 @@ function render(){
     }
 
     let smsBtn="";
-
-    if(isAdmin){
-      if(remainDays<=15) smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
-      if(remainDays<=7) smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
-      if(remainDays<=3) smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
+    if(isAdmin && remainDays<=15){
+      smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
     }
 
     list.innerHTML+=`
       <div class="card">
-        <b>${s.name}</b> (${s.count}회 / ${remainDays}일)
-        <button onclick="attend('${id}')">출석</button>
-        ${smsBtn}
+        <div class="name">${s.name}</div>
+        <div class="info">(${s.count}회 / ${remainDays}일)</div>
+
+        <div class="right">
+          <button onclick="attend('${id}')">출석</button>
+          ${smsBtn}
+        </div>
       </div>
     `;
   });
