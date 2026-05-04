@@ -69,7 +69,8 @@ let isAdmin = false;
 
 // 🔥 안전하게 불러오기
 db.ref("data/students").on("value", snap=>{
-  students = snap.val() || {};
+  const data = snapshot.val() || {};
+students = Object.values(data);
   render();
 });
 
