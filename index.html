@@ -68,11 +68,15 @@ input,textarea{width:100%;margin-bottom:10px;}
 <h1>Your art studio</h1>
 
 <div id="adminPanel">
+
+  <h3>이번달 매출: <span id="monthTotal">0</span>원</h3>
+
   이름 <input id="name">
   횟수 <input id="count" type="number">
   기간 <input id="days" type="number" value="30">
   전화번호 <input id="phone">
   <button onclick="addStudent()">학생추가</button>
+
 </div>
 
 <div id="list"></div>
@@ -123,19 +127,15 @@ const db = getDatabase(app);
 
 let data={}, currentId=null, isAdmin=false;
 
-// 🔊 효과음
 const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingdong.mp3");
 
-// 관리자 로그인
+// 관리자
 window.adminLogin=function(){
   const pw=prompt("비밀번호");
   if(pw==="0000"){
     isAdmin=true;
-
-    // 🔥 관리자 UI 표시
     adminPanel.style.display="block";
     document.body.style.background="#dceeff";
-
     render();
   }
 }
@@ -175,12 +175,12 @@ window.attend=function(id){
 
 // 문자
 window.sendSMS=function(s){
-  const remainDays=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
-  const msg=`안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remainDays}일, ${s.count}회 남았습니다.`;
+  const remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
+  const msg=`안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remain}일, ${s.count}회 남았습니다.`;
   location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
-// 모달 열기
+// 모달
 window.openModal=function(id){
   if(!isAdmin) return;
 
@@ -199,7 +199,6 @@ window.openModal=function(id){
   modal.style.display="block";
 }
 
-// 저장
 window.saveStudent=function(){
   update(ref(db,"students/"+currentId),{
     name:m_name.value,
@@ -211,7 +210,6 @@ window.saveStudent=function(){
   closeModal();
 }
 
-// 삭제
 window.deleteStudent=function(){
   if(confirm("삭제?")){
     remove(ref(db,"students/"+currentId));
@@ -219,7 +217,6 @@ window.deleteStudent=function(){
   }
 }
 
-// 결제 추가
 window.addPayment=function(){
   const amount=Number(payInput.value);
   if(!amount) return;
@@ -234,7 +231,10 @@ window.addPayment=function(){
   payInput.value="";
 }
 
-// 결제 렌더
+window.delPay=function(k){
+  remove(ref(db,"students/"+currentId+"/payments/"+k));
+}
+
 function renderPayments(s){
   m_pay.innerHTML="";
   if(s.payments){
@@ -247,12 +247,6 @@ function renderPayments(s){
   }
 }
 
-// 결제 삭제
-window.delPay=function(k){
-  remove(ref(db,"students/"+currentId+"/payments/"+k));
-}
-
-// 출석 로그
 function renderLogs(s){
   m_logs.innerHTML="";
   if(s.logs){
@@ -262,11 +256,28 @@ function renderLogs(s){
   }
 }
 
-window.closeModal=function(){
-  modal.style.display="none";
+// 🔥 월매출 계산
+function calcMonthTotal(){
+  let total=0;
+  const now=new Date();
+
+  Object.values(data).forEach(s=>{
+    if(s.payments){
+      Object.values(s.payments).forEach(p=>{
+        const d=new Date(p.date);
+        if(d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear()){
+          total+=p.amount;
+        }
+      });
+    }
+  });
+
+  if(isAdmin){
+    document.getElementById("monthTotal").innerText=total;
+  }
 }
 
-// 화면 렌더
+// 화면
 function render(){
   list.innerHTML="";
 
@@ -290,13 +301,23 @@ function render(){
         <div class="right">
           <button onclick="attend('${id}')">출석</button>
           ${smsBtn}
+          ${isAdmin ? `<button onclick="deleteStudentConfirm('${id}')">삭제</button>` : ""}
         </div>
       </div>
     `;
   });
+
+  calcMonthTotal(); // 🔥 여기 핵심
 }
 
-// 데이터 감지
+// 카드 삭제
+window.deleteStudentConfirm=function(id){
+  if(confirm("삭제?")){
+    remove(ref(db,"students/"+id));
+  }
+}
+
+// 데이터
 onValue(ref(db,"students"),snap=>{
   data=snap.val()||{};
   render();
