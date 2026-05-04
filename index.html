@@ -24,11 +24,7 @@ h1{text-align:center;}
   align-items:center;
 }
 
-.name{
-  font-weight:bold;
-  cursor:pointer;
-}
-
+.name{font-weight:bold; cursor:pointer;}
 .info{margin-left:10px;}
 .right{margin-left:auto;}
 
@@ -40,10 +36,7 @@ button{margin-left:5px;}
   right:20px;
 }
 
-#admin{
-  display:none;
-  padding:15px;
-}
+#admin{display:none;padding:15px;}
 
 .smsBtn{
   background:#ff8f8f;
@@ -52,13 +45,33 @@ button{margin-left:5px;}
   border-radius:8px;
   padding:5px 10px;
 }
+
+/* 🔥 모달 */
+#modal{
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+  display:none;
+}
+
+#modalContent{
+  background:#fff;
+  width:400px;
+  margin:50px auto;
+  padding:20px;
+  border-radius:12px;
+}
+input, textarea{
+  width:100%;
+  margin-bottom:10px;
+}
 </style>
 </head>
 
 <body>
 
 <h1>Your art studio</h1>
-
 <div id="list"></div>
 
 <button id="adminBtn" onclick="adminLogin()">관리자</button>
@@ -71,10 +84,33 @@ button{margin-left:5px;}
   <button onclick="addStudent()">추가</button>
 </div>
 
+<!-- 🔥 모달 -->
+<div id="modal">
+  <div id="modalContent">
+    <h3>학생 정보</h3>
+
+    이름 <input id="m_name">
+    전화번호 <input id="m_phone">
+    남은횟수 <input id="m_count" type="number">
+    금액 <input id="m_price" type="number">
+    메모 <textarea id="m_memo"></textarea>
+
+    <h4>출석로그</h4>
+    <div id="m_logs"></div>
+
+    <h4>결제로그</h4>
+    <div id="m_pay"></div>
+
+    <button onclick="saveStudent()">저장</button>
+    <button onclick="deleteStudent()">삭제</button>
+    <button onclick="closeModal()">닫기</button>
+  </div>
+</div>
+
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
@@ -88,6 +124,7 @@ const db = getDatabase(app);
 
 let isAdmin=false;
 let data={};
+let currentId=null;
 
 const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingdong.mp3");
 
@@ -96,7 +133,7 @@ window.adminLogin=function(){
   const pw=prompt("비밀번호");
   if(pw==="0000"){
     isAdmin=true;
-    document.getElementById("admin").style.display="block";
+    admin.style.display="block";
     render();
   }
 }
@@ -104,7 +141,6 @@ window.adminLogin=function(){
 // 학생 추가
 window.addStudent=function(){
   const newRef=push(ref(db,"students"));
-
   set(newRef,{
     name:name.value,
     count:Number(count.value),
@@ -112,7 +148,9 @@ window.addStudent=function(){
     phone:phone.value,
     start:Date.now(),
     memo:"",
-    price:0
+    price:0,
+    logs:{},
+    payments:{}
   });
 }
 
@@ -126,8 +164,11 @@ window.attend=function(id){
   ding.currentTime=0;
   ding.play();
 
+  const today=new Date().toISOString().slice(0,10);
+
   update(ref(db,"students/"+id),{
-    count:s.count-1
+    count:s.count-1,
+    ["logs/"+today]:true
   });
 }
 
@@ -138,21 +179,60 @@ window.sendSMS=function(s){
   location.href = `sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
-// 🔥 관리자 수정 팝업
-window.editStudent=function(id){
+// 🔥 모달 열기
+window.openModal=function(id){
   if(!isAdmin) return;
 
+  currentId=id;
   const s=data[id];
 
-  const memo = prompt("메모", s.memo||"");
-  const count = prompt("남은 횟수", s.count);
-  const price = prompt("금액", s.price||0);
+  m_name.value=s.name||"";
+  m_phone.value=s.phone||"";
+  m_count.value=s.count||0;
+  m_price.value=s.price||0;
+  m_memo.value=s.memo||"";
 
-  update(ref(db,"students/"+id),{
-    memo:memo,
-    count:Number(count),
-    price:Number(price)
+  // 로그
+  m_logs.innerHTML="";
+  if(s.logs){
+    Object.keys(s.logs).forEach(d=>{
+      m_logs.innerHTML+=d+"<br>";
+    });
+  }
+
+  // 결제
+  m_pay.innerHTML="";
+  if(s.payments){
+    Object.values(s.payments).forEach(p=>{
+      m_pay.innerHTML+=new Date(p.date).toLocaleDateString()+" "+p.amount+"원<br>";
+    });
+  }
+
+  modal.style.display="block";
+}
+
+// 저장
+window.saveStudent=function(){
+  update(ref(db,"students/"+currentId),{
+    name:m_name.value,
+    phone:m_phone.value,
+    count:Number(m_count.value),
+    price:Number(m_price.value),
+    memo:m_memo.value
   });
+  closeModal();
+}
+
+// 삭제
+window.deleteStudent=function(){
+  if(confirm("삭제?")){
+    remove(ref(db,"students/"+currentId));
+    closeModal();
+  }
+}
+
+window.closeModal=function(){
+  modal.style.display="none";
 }
 
 // 화면
@@ -173,7 +253,7 @@ function render(){
 
     list.innerHTML+=`
       <div class="card">
-        <div class="name" onclick="editStudent('${id}')">${s.name}</div>
+        <div class="name" onclick="openModal('${id}')">${s.name}</div>
         <div class="info">(${s.count}회 / ${remainDays}일)</div>
 
         <div class="right">
