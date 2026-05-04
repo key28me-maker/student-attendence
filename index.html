@@ -8,63 +8,35 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"></script>
 
 <style>
-body{
-  margin:0;
-  font-family:sans-serif;
-  background:#9fbfaf;
-}
-h1{
-  text-align:center;
-  margin-top:30px;
-}
-.card{
-  background:#fff;
-  margin:10px;
-  padding:15px;
-  border-radius:12px;
-}
-button{
-  margin-left:5px;
-}
-#adminBtn{
-  position:fixed;
-  bottom:20px;
-  right:20px;
-}
-#admin{
-  display:none;
-  padding:15px;
-}
-textarea{
-  width:100%;
-  margin-top:5px;
-}
+body{font-family:sans-serif;background:#9fbfaf;}
+h1{text-align:center;margin-top:30px;}
+.card{background:#fff;margin:10px;padding:15px;border-radius:12px;}
+button{margin-left:5px;}
+#adminBtn{position:fixed;bottom:20px;right:20px;}
+#admin{display:none;padding:15px;}
+.smsBtn{background:#ff8f8f;color:#fff;border:none;border-radius:8px;padding:5px 10px;}
 </style>
 </head>
 
 <body>
 
 <h1>Your art studio</h1>
-
 <div id="list"></div>
 
 <button id="adminBtn" onclick="adminLogin()">관리자</button>
 
 <div id="admin">
-  <h3>학생 추가</h3>
   이름 <input id="name">
   횟수 <input id="count" type="number">
   기간 <input id="days" type="number" value="30">
+  전화번호 <input id="phone">
   <button onclick="addStudent()">추가</button>
-
-  <h3>월 매출</h3>
-  <div id="money"></div>
 </div>
 
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
@@ -76,17 +48,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const list = document.getElementById("list");
-const moneyDiv = document.getElementById("money");
-
-// 🔊 mp3 (네 GitHub 파일)
-const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingdong.mp3");
-ding.preload = "auto";
-
 let isAdmin=false;
 let data={};
 
-// 관리자 로그인
+const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingdong.mp3");
+
+// 관리자
 window.adminLogin=function(){
   const pw=prompt("비밀번호");
   if(pw==="0000"){
@@ -98,23 +65,14 @@ window.adminLogin=function(){
 
 // 학생 추가
 window.addStudent=function(){
-  if(!isAdmin) return;
-
-  const name=document.getElementById("name").value;
-  const count=Number(document.getElementById("count").value);
-  const days=Number(document.getElementById("days").value)||30;
-
   const newRef=push(ref(db,"students"));
 
   set(newRef,{
-    name,
-    count,
-    total:count,
+    name:name.value,
+    count:Number(count.value),
+    days:Number(days.value)||30,
+    phone:phone.value,
     start:Date.now(),
-    days,
-    memo:"",
-    logs:{},
-    payments:{},
     notified:{}
   });
 }
@@ -122,153 +80,58 @@ window.addStudent=function(){
 // 출석
 window.attend=function(id){
   const s=data[id];
-  if(s.count<=0) return alert("횟수 없음");
+  if(s.count<=0) return;
 
   if(!confirm("출석하시겠습니까?")) return;
 
-  // 🔊 소리 먼저
   ding.currentTime=0;
-  ding.play().catch(()=>{});
+  ding.play();
 
-  const today=new Date().toISOString().slice(0,10);
-
-  let updates={
+  update(ref(db,"students/"+id),{
     count:s.count-1
-  };
+  });
+}
 
-  updates["logs/"+today]=true;
-
-  // 🔥 자동 문자 조건
-  let msg="";
-
+// 문자 보내기 (핵심)
+window.sendSMS=function(s){
   const remainDays = Math.ceil((s.start + s.days*86400000 - Date.now())/86400000);
 
-  if(s.count-1<=0 && !s.notified?.end){
-    msg=`<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
-    updates["notified/end"]=true;
-  }
-  else if(remainDays<=3 && !s.notified?.["3"]){
-    msg=`${s.name}님 수업횟수 ${s.count-1}회, 사용기한 3일 남았습니다`;
-    updates["notified/3"]=true;
-  }
-  else if(remainDays<=7 && !s.notified?.["7"]){
-    msg=`${s.name}님 수업횟수 ${s.count-1}회, 사용기한 7일 남았습니다`;
-    updates["notified/7"]=true;
-  }
-  else if(remainDays<=15 && !s.notified?.["15"]){
-    msg=`${s.name}님 수업횟수 ${s.count-1}회, 사용기한 15일 남았습니다`;
-    updates["notified/15"]=true;
-  }
+  const msg = `안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remainDays}일, ${s.count}회 남았습니다.`;
 
-  update(ref(db,"students/"+id),updates);
-
-  if(msg && isAdmin){
-    alert("자동문자:\n"+msg);
-  }
+  // 📱 문자앱 열기
+  location.href = `sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
-// 삭제
-window.del=function(id){
-  if(!isAdmin) return;
-  if(confirm("삭제?")){
-    remove(ref(db,"students/"+id));
-  }
-}
-
-// 메모 저장
-window.saveMemo=function(id,val){
-  if(!isAdmin) return;
-  update(ref(db,"students/"+id),{memo:val});
-}
-
-// 결제
-window.pay=function(id){
-  if(!isAdmin) return;
-
-  const amount=Number(prompt("금액"));
-  if(!amount) return;
-
-  const pkey=push(ref(db,"students/"+id+"/payments")).key;
-
-  update(ref(db,"students/"+id+"/payments/"+pkey),{
-    amount,
-    date:Date.now()
-  });
-}
-
-// 상세보기 (출석+결제)
-window.showDetail=function(id){
-  const s=data[id];
-
-  let txt="📅 출석기록\n";
-  if(s.logs){
-    Object.keys(s.logs).forEach(d=>{
-      txt+=d+"\n";
-    });
-  }
-
-  txt+="\n💰 결제기록\n";
-  if(s.payments){
-    Object.values(s.payments).forEach(p=>{
-      txt+=new Date(p.date).toLocaleDateString()+" "+p.amount+"원\n";
-    });
-  }
-
-  alert(txt);
-}
-
-// 화면 렌더
+// 화면
 function render(){
   list.innerHTML="";
-  let total=0;
 
-  Object.entries(data).sort((a,b)=>{
-    return a[1].name.localeCompare(b[1].name,"ko");
-  }).forEach(([id,s])=>{
+  Object.entries(data).forEach(([id,s])=>{
 
-    let remain="-";
-
+    let remainDays="-";
     if(s.start && s.days){
-      remain=Math.ceil((s.start + s.days*86400000 - Date.now())/86400000);
-      if(isNaN(remain)) remain="-";
+      remainDays=Math.ceil((s.start + s.days*86400000 - Date.now())/86400000);
     }
 
-    let html=`
-    <div class="card">
-      <b onclick="showDetail('${id}')">${s.name}</b>
-      (${s.count}회 / ${remain}일)
-      <button onclick="attend('${id}')">출석</button>
-    `;
+    let smsBtn="";
 
     if(isAdmin){
-      html+=`
-        <button onclick="del('${id}')">삭제</button>
-        <button onclick="pay('${id}')">결제</button>
-        <textarea onchange="saveMemo('${id}',this.value)">${s.memo||""}</textarea>
-      `;
+      if(remainDays<=15) smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
+      if(remainDays<=7) smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
+      if(remainDays<=3) smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
     }
 
-    html+=`</div>`;
-    list.innerHTML+=html;
-
-    // 월 매출
-    if(s.payments){
-      Object.values(s.payments).forEach(p=>{
-        const d=new Date(p.date);
-        if(d.getMonth()===new Date().getMonth()){
-          total+=p.amount;
-        }
-      });
-    }
-
+    list.innerHTML+=`
+      <div class="card">
+        <b>${s.name}</b> (${s.count}회 / ${remainDays}일)
+        <button onclick="attend('${id}')">출석</button>
+        ${smsBtn}
+      </div>
+    `;
   });
-
-  if(isAdmin){
-    moneyDiv.innerText="이번달 매출: "+total+"원";
-  }
 }
 
-// 데이터 감지
+// 데이터
 onValue(ref(db,"students"),snap=>{
   data=snap.val()||{};
   render();
