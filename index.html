@@ -11,38 +11,28 @@
 body{
   font-family:sans-serif;
   background:#9fbfaf;
-  zoom:2; /* 🔥 전체 2배 */
+  zoom:2;
 }
-
-h1{
-  text-align:center;
-}
+h1{text-align:center;}
 
 .card{
   background:#fff;
   margin:10px;
   padding:15px;
   border-radius:12px;
-
   display:flex;
   align-items:center;
 }
 
 .name{
   font-weight:bold;
+  cursor:pointer;
 }
 
-.info{
-  margin-left:10px;
-}
+.info{margin-left:10px;}
+.right{margin-left:auto;}
 
-.right{
-  margin-left:auto; /* 🔥 오른쪽 밀기 */
-}
-
-button{
-  margin-left:5px;
-}
+button{margin-left:5px;}
 
 #adminBtn{
   position:fixed;
@@ -121,7 +111,8 @@ window.addStudent=function(){
     days:Number(days.value)||30,
     phone:phone.value,
     start:Date.now(),
-    notified:{}
+    memo:"",
+    price:0
   });
 }
 
@@ -143,10 +134,25 @@ window.attend=function(id){
 // 문자
 window.sendSMS=function(s){
   const remainDays = Math.ceil((s.start + s.days*86400000 - Date.now())/86400000);
-
   const msg = `안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remainDays}일, ${s.count}회 남았습니다.`;
-
   location.href = `sms:${s.phone}?body=${encodeURIComponent(msg)}`;
+}
+
+// 🔥 관리자 수정 팝업
+window.editStudent=function(id){
+  if(!isAdmin) return;
+
+  const s=data[id];
+
+  const memo = prompt("메모", s.memo||"");
+  const count = prompt("남은 횟수", s.count);
+  const price = prompt("금액", s.price||0);
+
+  update(ref(db,"students/"+id),{
+    memo:memo,
+    count:Number(count),
+    price:Number(price)
+  });
 }
 
 // 화면
@@ -167,7 +173,7 @@ function render(){
 
     list.innerHTML+=`
       <div class="card">
-        <div class="name">${s.name}</div>
+        <div class="name" onclick="editStudent('${id}')">${s.name}</div>
         <div class="info">(${s.count}회 / ${remainDays}일)</div>
 
         <div class="right">
