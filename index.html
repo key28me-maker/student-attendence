@@ -16,7 +16,7 @@ h1{
 }
 
 .inputWrap{
-  display:flex;
+  display:none; /* 기본 숨김 */
   gap:10px;
   margin-bottom:20px;
 }
@@ -48,8 +48,8 @@ button{
 
 .btns button{
   margin-left:5px;
-  background:#ff8f8f;
 }
+
 .adminBtn{
   position:fixed;
   right:20px;
@@ -64,7 +64,7 @@ button{
 
 <h1>Your art studio</h1>
 
-<div class="inputWrap">
+<div class="inputWrap" id="inputWrap">
   <input id="name" placeholder="학생 이름">
   <input id="count" placeholder="횟수">
   <button onclick="addStudent()">추가</button>
@@ -93,10 +93,16 @@ let isAdmin = false;
 
 window.toggleAdmin = function(){
   isAdmin = !isAdmin;
+
+  // 👉 관리자일 때만 입력창 보이기
+  document.getElementById("inputWrap").style.display = isAdmin ? "flex" : "none";
+
   render(currentData);
 }
 
 window.addStudent = function(){
+  if(!isAdmin) return; // 관리자만 가능
+
   const name = document.getElementById("name").value;
   const count = Number(document.getElementById("count").value);
 
@@ -119,18 +125,21 @@ window.attend = function(key, student){
     count:newCount
   });
 
-  // 🔊 출석 소리
   const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
   audio.play();
 }
 
 window.removeStudent = function(key){
+  if(!isAdmin) return;
+
   if(confirm("삭제할거야?")){
     remove(ref(db,"students/"+key));
   }
 }
 
 window.sendSMS = function(student){
+  if(!isAdmin) return;
+
   alert(`${student.name}님\n남은횟수 ${student.count}회\n사용기한 ${student.days||30}일`);
 }
 
@@ -158,7 +167,7 @@ function render(data){
 
       <div class="btns">
         <button onclick='attend("${key}", ${JSON.stringify(s)})'>출석</button>
-        <button onclick='sendSMS(${JSON.stringify(s)})'>문자</button>
+        ${isAdmin ? `<button onclick='sendSMS(${JSON.stringify(s)})'>문자</button>` : ``}
         ${isAdmin ? `<button onclick='removeStudent("${key}")'>삭제</button>` : ``}
       </div>
     `;
