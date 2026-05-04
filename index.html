@@ -68,7 +68,7 @@ let students = {};
 let isAdmin = false;
 
 // 🔥 안전하게 불러오기
-db.ref("students").on("value", snap=>{
+db.ref("data/students").on("value", snap=>{
   students = snap.val() || {};
   render();
 });
@@ -80,7 +80,7 @@ function addStudent(){
 
   const id = Date.now();
 
-  db.ref("students/"+id).set({
+  db.ref("data/students/"+id).set({
     name:name,
     count:10,
     days:30,
@@ -94,7 +94,7 @@ function attend(id){
   if(!confirm("출석하시겠습니까?")) return;
 
   const s = students[id];
-  db.ref("students/"+id).update({
+  db.ref("data/students/"+id).update({
     count:(s.count||0)-1
   });
 }
@@ -102,7 +102,7 @@ function attend(id){
 // 🔥 삭제 (개별 삭제)
 function deleteStudent(id){
   if(!confirm("삭제?")) return;
-  db.ref("students/"+id).remove();
+  db.ref("data/students/"+id).remove();
 }
 
 // 🔥 관리자 토글
