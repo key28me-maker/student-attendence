@@ -8,7 +8,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"></script>
 
 <style>
-body{font-family:sans-serif;background:#9fbfaf;zoom:2;}
+body{
+  font-family:sans-serif;
+  background:#9fbfaf;
+  zoom:2;
+}
 h1{text-align:center;}
 
 .card{
@@ -24,6 +28,20 @@ h1{text-align:center;}
 .info{margin-left:10px;}
 .right{margin-left:auto;}
 
+#adminBtn{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+}
+
+#adminPanel{
+  display:none;
+  background:#fff;
+  padding:10px;
+  margin:10px;
+  border-radius:10px;
+}
+
 #modal{
   position:fixed;
   top:0;left:0;
@@ -34,21 +52,32 @@ h1{text-align:center;}
 
 #modalContent{
   background:#fff;
-  width:400px;
+  width:420px;
   margin:50px auto;
   padding:20px;
   border-radius:12px;
 }
 
 input,textarea{width:100%;margin-bottom:10px;}
+.smsBtn{background:#ff8f8f;color:#fff;border:none;border-radius:8px;}
 </style>
 </head>
 
 <body>
 
 <h1>Your art studio</h1>
+
+<div id="adminPanel">
+  이름 <input id="name">
+  횟수 <input id="count" type="number">
+  기간 <input id="days" type="number" value="30">
+  전화번호 <input id="phone">
+  <button onclick="addStudent()">학생추가</button>
+</div>
+
 <div id="list"></div>
-<button onclick="adminLogin()">관리자</button>
+
+<button id="adminBtn" onclick="adminLogin()">관리자</button>
 
 <!-- 모달 -->
 <div id="modal">
@@ -63,7 +92,7 @@ input,textarea{width:100%;margin-bottom:10px;}
 메모 <textarea id="m_memo"></textarea>
 
 <h4>💰 결제 추가</h4>
-<input id="payInput" type="number" placeholder="금액">
+<input id="payInput" type="number">
 <button onclick="addPayment()">추가</button>
 
 <h4>결제 로그</h4>
@@ -94,16 +123,67 @@ const db = getDatabase(app);
 
 let data={}, currentId=null, isAdmin=false;
 
-// 관리자
+// 🔊 효과음
+const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingdong.mp3");
+
+// 관리자 로그인
 window.adminLogin=function(){
-  if(prompt("비번")==="0000"){
+  const pw=prompt("비밀번호");
+  if(pw==="0000"){
     isAdmin=true;
+
+    // 🔥 관리자 UI 표시
+    adminPanel.style.display="block";
+    document.body.style.background="#dceeff";
+
+    render();
   }
+}
+
+// 학생 추가
+window.addStudent=function(){
+  const newRef=push(ref(db,"students"));
+
+  set(newRef,{
+    name:name.value,
+    count:Number(count.value),
+    days:Number(days.value)||30,
+    phone:phone.value,
+    start:Date.now(),
+    memo:"",
+    price:0,
+    logs:{},
+    payments:{}
+  });
+}
+
+// 출석
+window.attend=function(id){
+  const s=data[id];
+  if(s.count<=0) return;
+
+  ding.currentTime=0;
+  ding.play();
+
+  const today=new Date().toISOString().slice(0,10);
+
+  update(ref(db,"students/"+id),{
+    count:s.count-1,
+    ["logs/"+today]:true
+  });
+}
+
+// 문자
+window.sendSMS=function(s){
+  const remainDays=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
+  const msg=`안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remainDays}일, ${s.count}회 남았습니다.`;
+  location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
 // 모달 열기
 window.openModal=function(id){
   if(!isAdmin) return;
+
   currentId=id;
   const s=data[id];
 
@@ -113,10 +193,30 @@ window.openModal=function(id){
   m_price.value=s.price||0;
   m_memo.value=s.memo||"";
 
-  renderPayments(s);
   renderLogs(s);
+  renderPayments(s);
 
   modal.style.display="block";
+}
+
+// 저장
+window.saveStudent=function(){
+  update(ref(db,"students/"+currentId),{
+    name:m_name.value,
+    phone:m_phone.value,
+    count:Number(m_count.value),
+    price:Number(m_price.value),
+    memo:m_memo.value
+  });
+  closeModal();
+}
+
+// 삭제
+window.deleteStudent=function(){
+  if(confirm("삭제?")){
+    remove(ref(db,"students/"+currentId));
+    closeModal();
+  }
 }
 
 // 결제 추가
@@ -162,57 +262,41 @@ function renderLogs(s){
   }
 }
 
-// 저장
-window.saveStudent=function(){
-  update(ref(db,"students/"+currentId),{
-    name:m_name.value,
-    phone:m_phone.value,
-    count:Number(m_count.value),
-    price:Number(m_price.value),
-    memo:m_memo.value
-  });
-  closeModal();
-}
-
-// 삭제
-window.deleteStudent=function(){
-  if(confirm("삭제?")){
-    remove(ref(db,"students/"+currentId));
-    closeModal();
-  }
-}
-
 window.closeModal=function(){
   modal.style.display="none";
 }
 
-// 화면
+// 화면 렌더
 function render(){
   list.innerHTML="";
+
   Object.entries(data).forEach(([id,s])=>{
+
+    let remain="-";
+    if(s.start && s.days){
+      remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
+    }
+
+    let smsBtn="";
+    if(isAdmin && remain<=15){
+      smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
+    }
+
     list.innerHTML+=`
       <div class="card">
-        <div onclick="openModal('${id}')">${s.name}</div>
+        <div class="name" onclick="openModal('${id}')">${s.name}</div>
+        <div class="info">(${s.count}회 / ${remain}일)</div>
+
         <div class="right">
           <button onclick="attend('${id}')">출석</button>
+          ${smsBtn}
         </div>
       </div>
     `;
   });
 }
 
-// 출석
-window.attend=function(id){
-  const s=data[id];
-  if(s.count<=0) return;
-
-  update(ref(db,"students/"+id),{
-    count:s.count-1,
-    ["logs/"+new Date().toISOString().slice(0,10)]:true
-  });
-}
-
-// 데이터
+// 데이터 감지
 onValue(ref(db,"students"),snap=>{
   data=snap.val()||{};
   render();
