@@ -4,53 +4,39 @@
 <meta charset="UTF-8">
 <title>Your art studio</title>
 
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
 <style>
 body{
-  background:#a8c5b5;
   font-family:sans-serif;
-  padding:20px;
+  background:#a8c7b5;
+  text-align:center;
 }
-h1{text-align:center;}
 
-.inputWrap{
-  display:none;
-  gap:10px;
-  margin-bottom:20px;
+h1{
+  margin-top:40px;
 }
-input{
+
+input,button{
+  padding:8px;
+  margin:5px;
+}
+
+.student{
+  background:#eee;
+  margin:10px;
   padding:10px;
-  font-size:16px;
-  flex:1;
-}
-button{
-  padding:10px 15px;
-  border:none;
   border-radius:10px;
-  background:#ff8f8f;
-  color:white;
-  cursor:pointer;
 }
-.card{
-  background:white;
-  padding:15px;
-  border-radius:15px;
-  margin-bottom:10px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-.btns button{margin-left:5px;}
+
 .adminBtn{
   position:fixed;
-  right:20px;
   bottom:20px;
-  background:#333;
+  right:20px;
 }
-.detail{
-  font-size:13px;
-  color:#555;
-  margin-top:5px;
-}
+
+.hidden{display:none;}
 </style>
 </head>
 
@@ -58,11 +44,11 @@ button{
 
 <h1>Your art studio</h1>
 
-<div class="inputWrap" id="inputWrap">
-  <input id="name" placeholder="학생 이름">
-  <input id="count" placeholder="횟수">
-  <input id="days" placeholder="일수 (예:30)">
-  <input id="price" placeholder="결제금액">
+<div id="adminPanel" class="hidden">
+  <input id="name" placeholder="이름">
+  <input id="count" placeholder="횟수" type="number">
+  <input id="days" placeholder="기간(일)" type="number">
+  <input id="phone" placeholder="전화번호">
   <button onclick="addStudent()">추가</button>
 </div>
 
@@ -70,11 +56,7 @@ button{
 
 <button class="adminBtn" onclick="toggleAdmin()">관리자</button>
 
-<script type="module">
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
-
+<script>
 const firebaseConfig = {
   apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
   authDomain: "student-attendence-e9f58.firebaseapp.com",
@@ -82,140 +64,184 @@ const firebaseConfig = {
   projectId: "student-attendence-e9f58"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-let isAdmin = false;
-let currentData = {};
+let isAdmin=false;
 
-window.toggleAdmin = function(){
+function toggleAdmin(){
   if(!isAdmin){
-    const pw = prompt("비밀번호 입력");
-    if(pw !== "0000"){
-      alert("비밀번호 틀림");
-      return;
+    const pw=prompt("비밀번호");
+    if(pw==="0000"){
+      isAdmin=true;
+      document.getElementById("adminPanel").classList.remove("hidden");
+      render();
     }
+  }else{
+    isAdmin=false;
+    document.getElementById("adminPanel").classList.add("hidden");
+    render();
   }
-  isAdmin = !isAdmin;
-  document.getElementById("inputWrap").style.display = isAdmin ? "flex" : "none";
-  render(currentData);
 }
 
-window.addStudent = function(){
-  if(!isAdmin) return;
+function addStudent(){
+  const name=document.getElementById("name").value;
+  const count=Number(document.getElementById("count").value);
+  const days=Number(document.getElementById("days").value);
+  const phone=document.getElementById("phone").value;
 
-  const name = nameInput.value;
-  const count = Number(countInput.value);
-  const days = Number(daysInput.value) || 30;
-  const price = Number(priceInput.value) || 0;
-
-  push(ref(db,"students"),{
+  db.ref("students").push({
     name,
     count,
     days,
-    price,
+    phone,
+    start:Date.now(),
     memo:"",
-    created:Date.now(),
-    notified:{} // 문자 중복 방지
+    logs:{},
+    payments:{}
   });
 }
 
-window.attend = function(key, s){
-  if(!confirm("출석하시겠습니까?")) return;
-
-  let newCount = (s.count || 0) - 1;
-  let newDays = (s.days || 0) - 1;
-
-  const updates = {
-    count:newCount,
-    days:newDays
-  };
-
-  // 🔥 자동 문자 조건
-  let msg = "";
-
-  if(newCount <= 0 && !s.notified?.end){
-    msg = `<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
-    updates["notified/end"] = true;
-  }
-  else if(newDays <= 3 && !s.notified?.["3"]){
-    msg = `${s.name}님 수업횟수 ${newCount}회, 사용기한 3일 남았습니다`;
-    updates["notified/3"] = true;
-  }
-  else if(newDays <= 7 && !s.notified?.["7"]){
-    msg = `${s.name}님 수업횟수 ${newCount}회, 사용기한 7일 남았습니다`;
-    updates["notified/7"] = true;
-  }
-  else if(newDays <= 15 && !s.notified?.["15"]){
-    msg = `${s.name}님 수업횟수 ${newCount}회, 사용기한 15일 남았습니다`;
-    updates["notified/15"] = true;
+function attend(key,data){
+  if(data.count<=0){
+    sendSMS(data.phone,`${data.name}님 수업횟수가 모두 소진되었습니다.`);
+    return;
   }
 
-  update(ref(db,"students/"+key),updates);
+  db.ref("students/"+key).update({
+    count:data.count-1
+  });
 
-  if(msg && isAdmin){
-    alert("자동문자:\n" + msg);
-  }
+  const today=new Date().toISOString().slice(0,10);
 
-  const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+  db.ref("students/"+key+"/logs/"+today).set(true);
+
+  dingdong();
+}
+
+function dingdong(){
+  const audio=new Audio("https://actions.google.com/sounds/v1/alarms/ding_dong.ogg");
   audio.play();
 }
 
-window.sendSMS = function(s){
-  if(!isAdmin) return;
-
-  alert(`${s.name}님\n남은횟수 ${s.count}회\n남은일수 ${s.days}일`);
+function sendSMS(phone,msg){
+  alert("문자:\n"+msg);
 }
 
-window.removeStudent = function(key){
-  if(!isAdmin) return;
-  if(confirm("삭제할거야?")){
-    remove(ref(db,"students/"+key));
+function render(){
+  db.ref("students").on("value",snap=>{
+    const data=snap.val()||{};
+    const list=document.getElementById("list");
+    list.innerHTML="";
+
+    let total=0;
+
+    Object.keys(data).sort((a,b)=>{
+      return data[a].name.localeCompare(data[b].name);
+    }).forEach(key=>{
+      const s=data[key];
+
+      const today=new Date();
+      const d=Math.floor((today - new Date(s.start))/86400000);
+      const remain=s.days-d;
+
+      let smsBtn="";
+      if(isAdmin){
+        if(remain<=15 && !s.notified15){
+          smsBtn+=`<button onclick="notify('${key}',15)">문자15</button>`;
+        }
+        if(remain<=7 && !s.notified7){
+          smsBtn+=`<button onclick="notify('${key}',7)">문자7</button>`;
+        }
+        if(remain<=3 && !s.notified3){
+          smsBtn+=`<button onclick="notify('${key}',3)">문자3</button>`;
+        }
+      }
+
+      let html=`
+      <div class="student">
+      <b onclick="showDetail('${key}')">${s.name}</b> (${s.count}회 / ${remain}일)
+      <button onclick="attend('${key}',${JSON.stringify(s)})">출석</button>
+      ${smsBtn}
+      `;
+
+      if(isAdmin){
+        html+=`
+        <button onclick="del('${key}')">삭제</button>
+        <br>
+        <textarea onchange="saveMemo('${key}',this.value)">${s.memo||""}</textarea>
+        <br>
+        <button onclick="pay('${key}')">결제</button>
+        `;
+      }
+
+      html+=`</div>`;
+      list.innerHTML+=html;
+
+      if(s.payments){
+        Object.values(s.payments).forEach(p=>{
+          const month=new Date(p.date).getMonth();
+          const now=new Date().getMonth();
+          if(month===now) total+=p.amount;
+        });
+      }
+    });
+
+    if(isAdmin){
+      list.innerHTML+=`<h3>월매출: ${total}원</h3>`;
+    }
+  });
+}
+
+function notify(key,day){
+  db.ref("students/"+key).once("value",snap=>{
+    const s=snap.val();
+    sendSMS(s.phone,`${s.name}님 수업횟수 ${s.count}회, ${day}일 남았습니다`);
+    db.ref("students/"+key+"/notified"+day).set(true);
+  });
+}
+
+function saveMemo(key,val){
+  db.ref("students/"+key).update({memo:val});
+}
+
+function del(key){
+  if(confirm("삭제?")){
+    db.ref("students/"+key).remove();
   }
 }
 
-window.editMemo = function(key, old){
-  if(!isAdmin) return;
-  const m = prompt("메모 입력", old || "");
-  update(ref(db,"students/"+key),{memo:m});
-}
-
-function render(data){
-  list.innerHTML = "";
-
-  const arr = Object.entries(data||{}).sort((a,b)=>{
-    return a[1].name.localeCompare(b[1].name,"ko");
-  });
-
-  arr.forEach(([key,s])=>{
-
-    const div = document.createElement("div");
-    div.className="card";
-
-    div.innerHTML = `
-      <div>
-        <b>${s.name}</b>
-        ${s.count}회 / ${s.days}일
-        ${isAdmin ? `<div class="detail">결제:${s.price||0} / 메모:${s.memo||""}</div>` : ``}
-      </div>
-
-      <div class="btns">
-        <button onclick='attend("${key}", ${JSON.stringify(s)})'>출석</button>
-        ${isAdmin ? `<button onclick='sendSMS(${JSON.stringify(s)})'>문자</button>` : ``}
-        ${isAdmin ? `<button onclick='editMemo("${key}", "${s.memo||""}")'>메모</button>` : ``}
-        ${isAdmin ? `<button onclick='removeStudent("${key}")'>삭제</button>` : ``}
-      </div>
-    `;
-
-    list.appendChild(div);
+function pay(key){
+  const amount=Number(prompt("금액"));
+  db.ref("students/"+key+"/payments").push({
+    amount,
+    date:Date.now()
   });
 }
 
-onValue(ref(db,"students"),(snapshot)=>{
-  currentData = snapshot.val() || {};
-  render(currentData);
-});
+function showDetail(key){
+  db.ref("students/"+key).once("value",snap=>{
+    const s=snap.val();
+    let txt="출석기록\n";
 
+    if(s.logs){
+      Object.keys(s.logs).forEach(d=>{
+        txt+=d+"\n";
+      });
+    }
+
+    txt+="\n결제기록\n";
+    if(s.payments){
+      Object.values(s.payments).forEach(p=>{
+        txt+=new Date(p.date).toLocaleDateString()+" "+p.amount+"원\n";
+      });
+    }
+
+    alert(txt);
+  });
+}
+
+render();
 </script>
 
 </body>
