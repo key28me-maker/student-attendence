@@ -10,23 +10,18 @@ body{
   font-family:sans-serif;
   padding:20px;
 }
-
-h1{
-  text-align:center;
-}
+h1{text-align:center;}
 
 .inputWrap{
-  display:none; /* 기본 숨김 */
+  display:none;
   gap:10px;
   margin-bottom:20px;
 }
-
 input{
   padding:10px;
   font-size:16px;
   flex:1;
 }
-
 button{
   padding:10px 15px;
   border:none;
@@ -35,7 +30,6 @@ button{
   color:white;
   cursor:pointer;
 }
-
 .card{
   background:white;
   padding:15px;
@@ -45,19 +39,19 @@ button{
   justify-content:space-between;
   align-items:center;
 }
-
-.btns button{
-  margin-left:5px;
-}
-
+.btns button{margin-left:5px;}
 .adminBtn{
   position:fixed;
   right:20px;
   bottom:20px;
   background:#333;
 }
+.detail{
+  font-size:13px;
+  color:#555;
+  margin-top:5px;
+}
 </style>
-
 </head>
 
 <body>
@@ -67,6 +61,8 @@ button{
 <div class="inputWrap" id="inputWrap">
   <input id="name" placeholder="학생 이름">
   <input id="count" placeholder="횟수">
+  <input id="days" placeholder="일수 (예:30)">
+  <input id="price" placeholder="결제금액">
   <button onclick="addStudent()">추가</button>
 </div>
 
@@ -90,71 +86,108 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 let isAdmin = false;
+let currentData = {};
 
 window.toggleAdmin = function(){
+  if(!isAdmin){
+    const pw = prompt("비밀번호 입력");
+    if(pw !== "0000"){
+      alert("비밀번호 틀림");
+      return;
+    }
+  }
   isAdmin = !isAdmin;
-
-  // 👉 관리자일 때만 입력창 보이기
   document.getElementById("inputWrap").style.display = isAdmin ? "flex" : "none";
-
   render(currentData);
 }
 
 window.addStudent = function(){
-  if(!isAdmin) return; // 관리자만 가능
+  if(!isAdmin) return;
 
-  const name = document.getElementById("name").value;
-  const count = Number(document.getElementById("count").value);
-
-  if(!name) return;
+  const name = nameInput.value;
+  const count = Number(countInput.value);
+  const days = Number(daysInput.value) || 30;
+  const price = Number(priceInput.value) || 0;
 
   push(ref(db,"students"),{
     name,
     count,
-    days:30,
-    created:Date.now()
+    days,
+    price,
+    memo:"",
+    created:Date.now(),
+    notified:{} // 문자 중복 방지
   });
 }
 
-window.attend = function(key, student){
+window.attend = function(key, s){
   if(!confirm("출석하시겠습니까?")) return;
 
-  const newCount = (student.count || 0) - 1;
+  let newCount = (s.count || 0) - 1;
+  let newDays = (s.days || 0) - 1;
 
-  update(ref(db,"students/"+key),{
-    count:newCount
-  });
+  const updates = {
+    count:newCount,
+    days:newDays
+  };
+
+  // 🔥 자동 문자 조건
+  let msg = "";
+
+  if(newCount <= 0 && !s.notified?.end){
+    msg = `<유월화실> ${s.name}님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔`;
+    updates["notified/end"] = true;
+  }
+  else if(newDays <= 3 && !s.notified?.["3"]){
+    msg = `${s.name}님 수업횟수 ${newCount}회, 사용기한 3일 남았습니다`;
+    updates["notified/3"] = true;
+  }
+  else if(newDays <= 7 && !s.notified?.["7"]){
+    msg = `${s.name}님 수업횟수 ${newCount}회, 사용기한 7일 남았습니다`;
+    updates["notified/7"] = true;
+  }
+  else if(newDays <= 15 && !s.notified?.["15"]){
+    msg = `${s.name}님 수업횟수 ${newCount}회, 사용기한 15일 남았습니다`;
+    updates["notified/15"] = true;
+  }
+
+  update(ref(db,"students/"+key),updates);
+
+  if(msg && isAdmin){
+    alert("자동문자:\n" + msg);
+  }
 
   const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
   audio.play();
 }
 
-window.removeStudent = function(key){
+window.sendSMS = function(s){
   if(!isAdmin) return;
 
+  alert(`${s.name}님\n남은횟수 ${s.count}회\n남은일수 ${s.days}일`);
+}
+
+window.removeStudent = function(key){
+  if(!isAdmin) return;
   if(confirm("삭제할거야?")){
     remove(ref(db,"students/"+key));
   }
 }
 
-window.sendSMS = function(student){
+window.editMemo = function(key, old){
   if(!isAdmin) return;
-
-  alert(`${student.name}님\n남은횟수 ${student.count}회\n사용기한 ${student.days||30}일`);
+  const m = prompt("메모 입력", old || "");
+  update(ref(db,"students/"+key),{memo:m});
 }
-
-let currentData = {};
-
-const list = document.getElementById("list");
 
 function render(data){
   list.innerHTML = "";
 
-  const arr = Object.entries(data || {}).sort((a,b)=>{
+  const arr = Object.entries(data||{}).sort((a,b)=>{
     return a[1].name.localeCompare(b[1].name,"ko");
   });
 
-  arr.forEach(([key, s])=>{
+  arr.forEach(([key,s])=>{
 
     const div = document.createElement("div");
     div.className="card";
@@ -162,12 +195,14 @@ function render(data){
     div.innerHTML = `
       <div>
         <b>${s.name}</b>
-        ${s.count || 0}회 / ${s.days || 30}일
+        ${s.count}회 / ${s.days}일
+        ${isAdmin ? `<div class="detail">결제:${s.price||0} / 메모:${s.memo||""}</div>` : ``}
       </div>
 
       <div class="btns">
         <button onclick='attend("${key}", ${JSON.stringify(s)})'>출석</button>
         ${isAdmin ? `<button onclick='sendSMS(${JSON.stringify(s)})'>문자</button>` : ``}
+        ${isAdmin ? `<button onclick='editMemo("${key}", "${s.memo||""}")'>메모</button>` : ``}
         ${isAdmin ? `<button onclick='removeStudent("${key}")'>삭제</button>` : ``}
       </div>
     `;
