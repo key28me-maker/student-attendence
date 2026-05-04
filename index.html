@@ -1,42 +1,36 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
 <meta charset="UTF-8">
 <title>Your art studio</title>
 
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"></script>
 
 <style>
 body{
+  margin:0;
   font-family:sans-serif;
-  background:#a8c7b5;
-  text-align:center;
+  background:#9fbfaf;
 }
-
 h1{
+  text-align:center;
   margin-top:40px;
 }
-
-input,button{
-  padding:8px;
-  margin:5px;
-}
-
-.student{
+.card{
   background:#eee;
   margin:10px;
-  padding:10px;
+  padding:15px;
   border-radius:10px;
 }
-
-.adminBtn{
+button{
+  margin-left:10px;
+}
+#adminBtn{
   position:fixed;
   bottom:20px;
   right:20px;
 }
-
-.hidden{display:none;}
 </style>
 </head>
 
@@ -44,19 +38,26 @@ input,button{
 
 <h1>Your art studio</h1>
 
-<div id="adminPanel" class="hidden">
-  <input id="name" placeholder="이름">
-  <input id="count" placeholder="횟수" type="number">
-  <input id="days" placeholder="기간(일)" type="number">
-  <input id="phone" placeholder="전화번호">
-  <button onclick="addStudent()">추가</button>
-</div>
-
 <div id="list"></div>
 
-<button class="adminBtn" onclick="toggleAdmin()">관리자</button>
+<button id="adminBtn" onclick="adminLogin()">관리자</button>
 
-<script>
+<div id="admin" style="display:none; padding:20px;">
+  <h3>학생 추가</h3>
+  이름 <input id="name">
+  횟수 <input id="count" type="number">
+  기간(일) <input id="days" type="number">
+  <button onclick="addStudent()">추가</button>
+
+  <h3>월 매출</h3>
+  <div id="money"></div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
 const firebaseConfig = {
   apiKey: "AIzaSyAOAYSvUXY5PNDfAgxBq0OVKAbkY0Tp7IM",
   authDomain: "student-attendence-e9f58.firebaseapp.com",
@@ -64,184 +65,112 @@ const firebaseConfig = {
   projectId: "student-attendence-e9f58"
 };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const list = document.getElementById("list");
+const moneyDiv = document.getElementById("money");
 
 let isAdmin=false;
+let data={};
 
-function toggleAdmin(){
-  if(!isAdmin){
-    const pw=prompt("비밀번호");
-    if(pw==="0000"){
-      isAdmin=true;
-      document.getElementById("adminPanel").classList.remove("hidden");
-      render();
-    }
-  }else{
-    isAdmin=false;
-    document.getElementById("adminPanel").classList.add("hidden");
-    render();
+window.adminLogin=function(){
+  const pw=prompt("비밀번호");
+  if(pw==="0000"){
+    isAdmin=true;
+    document.getElementById("admin").style.display="block";
   }
 }
 
-function addStudent(){
+window.addStudent=function(){
   const name=document.getElementById("name").value;
   const count=Number(document.getElementById("count").value);
   const days=Number(document.getElementById("days").value);
-  const phone=document.getElementById("phone").value;
 
-  db.ref("students").push({
+  const newRef=push(ref(db,"students"));
+
+  set(newRef,{
     name,
     count,
-    days,
-    phone,
+    total:count,
     start:Date.now(),
+    days,
     memo:"",
-    logs:{},
-    payments:{}
+    logs:[],
+    payLogs:[{date:Date.now(), amount:count*10000}]
   });
-}
-
-function attend(key,data){
-  if(data.count<=0){
-    sendSMS(data.phone,`${data.name}님 수업횟수가 모두 소진되었습니다.`);
-    return;
-  }
-
-  db.ref("students/"+key).update({
-    count:data.count-1
-  });
-
-  const today=new Date().toISOString().slice(0,10);
-
-  db.ref("students/"+key+"/logs/"+today).set(true);
-
-  dingdong();
-}
-
-function dingdong(){
-  const audio=new Audio("https://actions.google.com/sounds/v1/alarms/ding_dong.ogg");
-  audio.play();
-}
-
-function sendSMS(phone,msg){
-  alert("문자:\n"+msg);
 }
 
 function render(){
-  db.ref("students").on("value",snap=>{
-    const data=snap.val()||{};
-    const list=document.getElementById("list");
-    list.innerHTML="";
+  list.innerHTML="";
+  let totalMoney=0;
 
-    let total=0;
+  Object.entries(data).forEach(([id,s])=>{
 
-    Object.keys(data).sort((a,b)=>{
-      return data[a].name.localeCompare(data[b].name);
-    }).forEach(key=>{
-      const s=data[key];
+    const remainDays = s.days
+      ? Math.ceil((s.start + s.days*86400000 - Date.now())/86400000)
+      : "-";
 
-      const today=new Date();
-      const d=Math.floor((today - new Date(s.start))/86400000);
-      const remain=s.days-d;
+    const div=document.createElement("div");
+    div.className="card";
 
-      let smsBtn="";
-      if(isAdmin){
-        if(remain<=15 && !s.notified15){
-          smsBtn+=`<button onclick="notify('${key}',15)">문자15</button>`;
-        }
-        if(remain<=7 && !s.notified7){
-          smsBtn+=`<button onclick="notify('${key}',7)">문자7</button>`;
-        }
-        if(remain<=3 && !s.notified3){
-          smsBtn+=`<button onclick="notify('${key}',3)">문자3</button>`;
-        }
-      }
+    div.innerHTML=`
+      <b>${s.name}</b> (${s.count}회 / ${remainDays}일)
+      <button onclick="attend('${id}')">출석</button>
+      ${isAdmin?`<button onclick="del('${id}')">삭제</button>`:""}
+    `;
 
-      let html=`
-      <div class="student">
-      <b onclick="showDetail('${key}')">${s.name}</b> (${s.count}회 / ${remain}일)
-      <button onclick="attend('${key}',${JSON.stringify(s)})">출석</button>
-      ${smsBtn}
-      `;
-
-      if(isAdmin){
-        html+=`
-        <button onclick="del('${key}')">삭제</button>
-        <br>
-        <textarea onchange="saveMemo('${key}',this.value)">${s.memo||""}</textarea>
-        <br>
-        <button onclick="pay('${key}')">결제</button>
-        `;
-      }
-
-      html+=`</div>`;
-      list.innerHTML+=html;
-
-      if(s.payments){
-        Object.values(s.payments).forEach(p=>{
-          const month=new Date(p.date).getMonth();
-          const now=new Date().getMonth();
-          if(month===now) total+=p.amount;
-        });
-      }
-    });
-
+    // 문자 조건
     if(isAdmin){
-      list.innerHTML+=`<h3>월매출: ${total}원</h3>`;
+      if(s.count===0){
+        sendSMS(s.name,"<유월화실> "+s.name+"님, 수업횟수가 모두 소진되었습니다. 빠른 시일내에 다시 뵙길 바래요😔");
+      }
+      else if(remainDays<=3){
+        sendSMS(s.name,`${s.name}님 수업횟수 ${s.count}회, 사용기한 ${remainDays}일 남았습니다`);
+      }
     }
+
+    list.appendChild(div);
+
+    // 매출
+    if(s.payLogs){
+      s.payLogs.forEach(p=>{
+        const d=new Date(p.date);
+        if(d.getMonth()===new Date().getMonth()){
+          totalMoney+=p.amount;
+        }
+      });
+    }
+
+  });
+
+  moneyDiv.innerText="이번달 매출: "+totalMoney+"원";
+}
+
+window.attend=function(id){
+  const s=data[id];
+  if(s.count<=0) return alert("횟수 없음");
+
+  update(ref(db,"students/"+id),{
+    count:s.count-1
   });
 }
 
-function notify(key,day){
-  db.ref("students/"+key).once("value",snap=>{
-    const s=snap.val();
-    sendSMS(s.phone,`${s.name}님 수업횟수 ${s.count}회, ${day}일 남았습니다`);
-    db.ref("students/"+key+"/notified"+day).set(true);
-  });
-}
-
-function saveMemo(key,val){
-  db.ref("students/"+key).update({memo:val});
-}
-
-function del(key){
+window.del=function(id){
   if(confirm("삭제?")){
-    db.ref("students/"+key).remove();
+    remove(ref(db,"students/"+id));
   }
 }
 
-function pay(key){
-  const amount=Number(prompt("금액"));
-  db.ref("students/"+key+"/payments").push({
-    amount,
-    date:Date.now()
-  });
+function sendSMS(name,msg){
+  console.log("문자:",msg);
 }
 
-function showDetail(key){
-  db.ref("students/"+key).once("value",snap=>{
-    const s=snap.val();
-    let txt="출석기록\n";
+onValue(ref(db,"students"),snap=>{
+  data=snap.val()||{};
+  render();
+});
 
-    if(s.logs){
-      Object.keys(s.logs).forEach(d=>{
-        txt+=d+"\n";
-      });
-    }
-
-    txt+="\n결제기록\n";
-    if(s.payments){
-      Object.values(s.payments).forEach(p=>{
-        txt+=new Date(p.date).toLocaleDateString()+" "+p.amount+"원\n";
-      });
-    }
-
-    alert(txt);
-  });
-}
-
-render();
 </script>
 
 </body>
