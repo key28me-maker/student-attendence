@@ -70,10 +70,10 @@ input,textarea{width:100%;margin-bottom:10px;}
 <h1>Your art studio</h1>
 
 <div id="adminPanel">
-  이름 <input id="name">
-  횟수 <input id="count" type="number">
-  기간 <input id="days" type="number" value="30">
-  전화번호 <input id="phone">
+  이름 <input id="s_name">
+  횟수 <input id="s_count" type="number">
+  기간 <input id="s_days" type="number" value="30">
+  전화번호 <input id="s_phone">
   <button onclick="addStudent()">학생추가</button>
 
   <h3 style="margin-top:20px;">이번달 매출: <span id="monthTotal">0</span>원</h3>
@@ -135,25 +135,38 @@ const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingd
 window.adminLogin=function(){
   if(prompt("비밀번호")==="0000"){
     isAdmin=true;
-    adminPanel.style.display="block";
+    document.getElementById("adminPanel").style.display="block";
     render();
   }
 }
 
-// 학생 추가
+// 학생 추가 — s_ prefix로 window.name 충돌 방지
 window.addStudent=function(){
+  const nameVal  = document.getElementById("s_name").value.trim();
+  const countVal = Number(document.getElementById("s_count").value);
+  const daysVal  = Number(document.getElementById("s_days").value) || 30;
+  const phoneVal = document.getElementById("s_phone").value.trim();
+
+  if(!nameVal) return alert("이름을 입력해주세요.");
+
   const newRef=push(ref(db,"students"));
   set(newRef,{
-    name:name.value,
-    count:Number(count.value),
-    days:Number(days.value)||30,
-    phone:phone.value,
+    name:nameVal,
+    count:countVal,
+    days:daysVal,
+    phone:phoneVal,
     start:Date.now(),
     memo:"",
     price:0,
     logs:{},
     payments:{}
   });
+
+  // 입력 초기화
+  document.getElementById("s_name").value="";
+  document.getElementById("s_count").value="";
+  document.getElementById("s_days").value="30";
+  document.getElementById("s_phone").value="";
 }
 
 // 출석
@@ -186,11 +199,11 @@ window.openModal=function(id){
   currentId=id;
   const s=data[id];
 
-  m_name.value=s.name||"";
-  m_phone.value=s.phone||"";
-  m_count.value=s.count||0;
-  m_price.value=s.price||0;
-  m_memo.value=s.memo||"";
+  document.getElementById("m_name").value=s.name||"";
+  document.getElementById("m_phone").value=s.phone||"";
+  document.getElementById("m_count").value=s.count||0;
+  document.getElementById("m_price").value=s.price||0;
+  document.getElementById("m_memo").value=s.memo||"";
 
   renderLogs(s);
   renderPayments(s);
@@ -206,11 +219,11 @@ window.closeModal=function(){
 // 저장
 window.saveStudent=function(){
   update(ref(db,"students/"+currentId),{
-    name:m_name.value,
-    phone:m_phone.value,
-    count:Number(m_count.value),
-    price:Number(m_price.value),
-    memo:m_memo.value
+    name:document.getElementById("m_name").value,
+    phone:document.getElementById("m_phone").value,
+    count:Number(document.getElementById("m_count").value),
+    price:Number(document.getElementById("m_price").value),
+    memo:document.getElementById("m_memo").value
   });
   closeModal();
 }
@@ -225,7 +238,7 @@ window.deleteStudent=function(){
 
 // 결제
 window.addPayment=function(){
-  const amount=Number(payInput.value);
+  const amount=Number(document.getElementById("payInput").value);
   if(!amount) return;
 
   const key=push(ref(db,"students/"+currentId+"/payments")).key;
@@ -235,7 +248,7 @@ window.addPayment=function(){
     date:Date.now()
   });
 
-  payInput.value="";
+  document.getElementById("payInput").value="";
 }
 
 window.delPay=function(k){
@@ -243,10 +256,11 @@ window.delPay=function(k){
 }
 
 function renderPayments(s){
-  m_pay.innerHTML="";
+  const el=document.getElementById("m_pay");
+  el.innerHTML="";
   if(s.payments){
     Object.entries(s.payments).forEach(([k,p])=>{
-      m_pay.innerHTML+=`
+      el.innerHTML+=`
         ${new Date(p.date).toLocaleDateString()} ${p.amount}원
         <button onclick="delPay('${k}')">❌</button><br>
       `;
@@ -255,10 +269,11 @@ function renderPayments(s){
 }
 
 function renderLogs(s){
-  m_logs.innerHTML="";
+  const el=document.getElementById("m_logs");
+  el.innerHTML="";
   if(s.logs){
     Object.keys(s.logs).sort().reverse().forEach(d=>{
-      m_logs.innerHTML+=d+"<br>";
+      el.innerHTML+=d+"<br>";
     });
   }
 }
@@ -280,29 +295,25 @@ function calcMonthTotal(){
   });
 
   if(isAdmin){
-    monthTotal.innerText=total;
+    document.getElementById("monthTotal").innerText=total;
   }
 }
 
-// ✅ 엑셀 다운로드
+// 엑셀 다운로드
 window.downloadExcel=function(){
   const wb = XLSX.utils.book_new();
 
-  // ── 시트1: 출석 로그 (학생별 날짜) ──
+  // 시트1: 출석 로그
   const allDates = new Set();
   Object.values(data).forEach(s=>{
     if(s.logs) Object.keys(s.logs).forEach(d=>allDates.add(d));
   });
   const sortedDates = Array.from(allDates).sort();
 
-  const logHeader = ["이름", ...sortedDates];
-  const logRows = [logHeader];
-
+  const logRows = [["이름", ...sortedDates]];
   Object.values(data).forEach(s=>{
     const row = [s.name||""];
-    sortedDates.forEach(d=>{
-      row.push(s.logs && s.logs[d] ? "✓" : "");
-    });
+    sortedDates.forEach(d=>row.push(s.logs && s.logs[d] ? "✓" : ""));
     logRows.push(row);
   });
 
@@ -310,21 +321,14 @@ window.downloadExcel=function(){
   ws1["!cols"] = [{ wch:12 }, ...sortedDates.map(()=>({ wch:12 }))];
   XLSX.utils.book_append_sheet(wb, ws1, "출석 로그");
 
-  // ── 시트2: 학생 현황 ──
+  // 시트2: 학생 현황
   const now = Date.now();
   const statusRows = [["이름", "남은 횟수", "남은 일수", "전화번호", "메모"]];
-
   Object.values(data).forEach(s=>{
     const remain = (s.start && s.days)
       ? Math.ceil((s.start + s.days*86400000 - now) / 86400000)
       : "-";
-    statusRows.push([
-      s.name||"",
-      s.count||0,
-      remain,
-      s.phone||"",
-      s.memo||""
-    ]);
+    statusRows.push([s.name||"", s.count||0, remain, s.phone||"", s.memo||""]);
   });
 
   const ws2 = XLSX.utils.aoa_to_sheet(statusRows);
@@ -337,10 +341,10 @@ window.downloadExcel=function(){
 
 // 화면
 function render(){
-  list.innerHTML="";
+  const listEl=document.getElementById("list");
+  listEl.innerHTML="";
 
   Object.entries(data).forEach(([id,s])=>{
-
     let remain="-";
     if(s.start && s.days){
       remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
@@ -351,11 +355,10 @@ function render(){
       smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
     }
 
-    list.innerHTML+=`
+    listEl.innerHTML+=`
       <div class="card">
         <div class="name" onclick="openModal('${id}')">${s.name}</div>
         <div class="info">(${s.count}회 / ${remain}일)</div>
-
         <div class="right">
           <button onclick="attend('${id}')">출석</button>
           ${smsBtn}
