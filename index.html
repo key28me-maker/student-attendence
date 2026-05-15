@@ -26,7 +26,7 @@ h1{text-align:center;}
 
 .name{font-weight:bold;cursor:pointer;font-size:1.5em;}
 .info{margin-left:10px;font-size:1.5em;}
-.right{margin-left:auto;}
+.right{margin-left:auto;display:flex;gap:6px;align-items:center;}
 .right button{font-size:1.5em;padding:6px 14px;}
 
 #adminPanel{
@@ -49,6 +49,7 @@ h1{text-align:center;}
   width:100%;height:100%;
   background:rgba(0,0,0,0.5);
   display:none;
+  z-index:100;
 }
 
 #modalContent{
@@ -60,7 +61,19 @@ h1{text-align:center;}
 }
 
 input,textarea{width:100%;margin-bottom:10px;}
-.smsBtn{background:#ff8f8f;color:#fff;border:none;border-radius:8px;font-size:1.5em;padding:6px 14px;}
+
+/* 문자 버튼: 남은일수에 따라 색 구분 */
+.smsBtn{
+  color:#fff;
+  border:none;
+  border-radius:8px;
+  font-size:1.5em;
+  padding:6px 14px;
+  cursor:pointer;
+}
+.smsBtn.warn15{background:#ffa500;}  /* 15일 이하 - 주황 */
+.smsBtn.warn7 {background:#ff4444;}  /* 7일 이하  - 빨강 */
+
 .excelBtn{background:#217346;color:#fff;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;margin-top:8px;}
 </style>
 </head>
@@ -77,7 +90,6 @@ input,textarea{width:100%;margin-bottom:10px;}
   <button onclick="addStudent()">학생추가</button>
 
   <h3 style="margin-top:20px;">이번달 매출: <span id="monthTotal">0</span>원</h3>
-
   <button class="excelBtn" onclick="downloadExcel()">📊 출석 엑셀 다운로드</button>
 </div>
 
@@ -85,7 +97,7 @@ input,textarea{width:100%;margin-bottom:10px;}
 
 <button id="adminBtn" onclick="adminLogin()">관리자</button>
 
-<!-- 모달 -->
+<!-- 학생 관리 모달 -->
 <div id="modal" onclick="closeModal(event)">
   <div id="modalContent" onclick="event.stopPropagation()">
 
@@ -131,7 +143,7 @@ let data={}, currentId=null, isAdmin=false;
 
 const ding = new Audio("https://key28me-maker.github.io/student-attendence/dingdong.mp3");
 
-// 관리자
+// 관리자 로그인
 window.adminLogin=function(){
   if(prompt("비밀번호")==="0000"){
     isAdmin=true;
@@ -140,7 +152,7 @@ window.adminLogin=function(){
   }
 }
 
-// 학생 추가 — s_ prefix로 window.name 충돌 방지
+// 학생 추가
 window.addStudent=function(){
   const nameVal  = document.getElementById("s_name").value.trim();
   const countVal = Number(document.getElementById("s_count").value);
@@ -162,17 +174,15 @@ window.addStudent=function(){
     payments:{}
   });
 
-  // 입력 초기화
   document.getElementById("s_name").value="";
   document.getElementById("s_count").value="";
   document.getElementById("s_days").value="30";
   document.getElementById("s_phone").value="";
 }
 
-// 출석
+// 출석 — 마이너스 허용 (횟수 제한 없음)
 window.attend=function(id){
   const s=data[id];
-  if(s.count<=0) return;
 
   ding.currentTime=0;
   ding.play();
@@ -185,10 +195,16 @@ window.attend=function(id){
   });
 }
 
-// 문자
-window.sendSMS=function(s){
-  const remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
-  const msg=`안녕하세요 유월화실입니다:) ${s.name}님 수강권이 ${remain}일, ${s.count}회 남았습니다.`;
+// 문자 전송 — id 기반으로 data에서 직접 참조
+window.sendSMS=function(id){
+  const s=data[id];
+  if(!s) return;
+
+  const remain=(s.start && s.days)
+    ? Math.ceil((s.start+s.days*86400000-Date.now())/86400000)
+    : "-";
+
+  const msg=`${s.name}님 안녕하세요 유월화실입니다. 수강횟수 ${s.count}회, 수강기간이 ${remain}일 남았습니다.`;
   location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
@@ -236,13 +252,12 @@ window.deleteStudent=function(){
   }
 }
 
-// 결제
+// 결제 추가
 window.addPayment=function(){
   const amount=Number(document.getElementById("payInput").value);
   if(!amount) return;
 
   const key=push(ref(db,"students/"+currentId+"/payments")).key;
-
   update(ref(db,"students/"+currentId+"/payments/"+key),{
     amount,
     date:Date.now()
@@ -260,10 +275,8 @@ function renderPayments(s){
   el.innerHTML="";
   if(s.payments){
     Object.entries(s.payments).forEach(([k,p])=>{
-      el.innerHTML+=`
-        ${new Date(p.date).toLocaleDateString()} ${p.amount}원
-        <button onclick="delPay('${k}')">❌</button><br>
-      `;
+      el.innerHTML+=`${new Date(p.date).toLocaleDateString()} ${p.amount}원
+        <button onclick="delPay('${k}')">❌</button><br>`;
     });
   }
 }
@@ -282,7 +295,6 @@ function renderLogs(s){
 function calcMonthTotal(){
   let total=0;
   const now=new Date();
-
   Object.values(data).forEach(s=>{
     if(s.payments){
       Object.values(s.payments).forEach(p=>{
@@ -293,66 +305,65 @@ function calcMonthTotal(){
       });
     }
   });
-
-  if(isAdmin){
-    document.getElementById("monthTotal").innerText=total;
-  }
+  if(isAdmin) document.getElementById("monthTotal").innerText=total;
 }
 
 // 엑셀 다운로드
 window.downloadExcel=function(){
-  const wb = XLSX.utils.book_new();
+  const wb=XLSX.utils.book_new();
 
   // 시트1: 출석 로그
-  const allDates = new Set();
+  const allDates=new Set();
   Object.values(data).forEach(s=>{
     if(s.logs) Object.keys(s.logs).forEach(d=>allDates.add(d));
   });
-  const sortedDates = Array.from(allDates).sort();
-
-  const logRows = [["이름", ...sortedDates]];
+  const sortedDates=Array.from(allDates).sort();
+  const logRows=[["이름",...sortedDates]];
   Object.values(data).forEach(s=>{
-    const row = [s.name||""];
-    sortedDates.forEach(d=>row.push(s.logs && s.logs[d] ? "✓" : ""));
+    const row=[s.name||""];
+    sortedDates.forEach(d=>row.push(s.logs&&s.logs[d]?"✓":""));
     logRows.push(row);
   });
-
-  const ws1 = XLSX.utils.aoa_to_sheet(logRows);
-  ws1["!cols"] = [{ wch:12 }, ...sortedDates.map(()=>({ wch:12 }))];
-  XLSX.utils.book_append_sheet(wb, ws1, "출석 로그");
+  const ws1=XLSX.utils.aoa_to_sheet(logRows);
+  ws1["!cols"]=[{wch:12},...sortedDates.map(()=>({wch:12}))];
+  XLSX.utils.book_append_sheet(wb,ws1,"출석 로그");
 
   // 시트2: 학생 현황
-  const now = Date.now();
-  const statusRows = [["이름", "남은 횟수", "남은 일수", "전화번호", "메모"]];
+  const now=Date.now();
+  const statusRows=[["이름","남은 횟수","남은 일수","전화번호","메모"]];
   Object.values(data).forEach(s=>{
-    const remain = (s.start && s.days)
-      ? Math.ceil((s.start + s.days*86400000 - now) / 86400000)
-      : "-";
-    statusRows.push([s.name||"", s.count||0, remain, s.phone||"", s.memo||""]);
+    const remain=(s.start&&s.days)
+      ?Math.ceil((s.start+s.days*86400000-now)/86400000)
+      :"-";
+    statusRows.push([s.name||"",s.count||0,remain,s.phone||"",s.memo||""]);
   });
+  const ws2=XLSX.utils.aoa_to_sheet(statusRows);
+  ws2["!cols"]=[{wch:12},{wch:10},{wch:10},{wch:16},{wch:24}];
+  XLSX.utils.book_append_sheet(wb,ws2,"학생 현황");
 
-  const ws2 = XLSX.utils.aoa_to_sheet(statusRows);
-  ws2["!cols"] = [{ wch:12 },{ wch:10 },{ wch:10 },{ wch:16 },{ wch:24 }];
-  XLSX.utils.book_append_sheet(wb, ws2, "학생 현황");
-
-  const dateStr = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `출석부_${dateStr}.xlsx`);
+  const dateStr=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`출석부_${dateStr}.xlsx`);
 }
 
-// 화면
+// 화면 렌더링
 function render(){
   const listEl=document.getElementById("list");
   listEl.innerHTML="";
 
   Object.entries(data).forEach(([id,s])=>{
     let remain="-";
-    if(s.start && s.days){
+    if(s.start&&s.days){
       remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
     }
 
+    // 문자 버튼: 관리자 + (15일 이하이거나 7일 이하)
     let smsBtn="";
-    if(isAdmin && remain<=15){
-      smsBtn=`<button class="smsBtn" onclick='sendSMS(${JSON.stringify(s)})'>문자</button>`;
+    if(isAdmin && remain!=="-"){
+      if(remain<=7){
+        smsBtn=`<button class="smsBtn warn7" onclick="sendSMS('${id}')">📩 문자</button>`;
+      } else if(remain<=15){
+        smsBtn=`<button class="smsBtn warn15" onclick="sendSMS('${id}')">📩 문자</button>`;
+      }
     }
 
     listEl.innerHTML+=`
@@ -370,13 +381,12 @@ function render(){
   calcMonthTotal();
 }
 
-// 데이터
+// 데이터 실시간 구독
 onValue(ref(db,"students"),snap=>{
   data=snap.val()||{};
   render();
 });
 
 </script>
-
 </body>
 </html>
