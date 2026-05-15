@@ -71,6 +71,7 @@ input,textarea{width:100%;margin-bottom:10px;}
   padding:6px 14px;
   cursor:pointer;
 }
+.smsBtn.warn30{background:#4caf50;}  /* 30일 이하 - 초록 */
 .smsBtn.warn15{background:#ffa500;}  /* 15일 이하 - 주황 */
 .smsBtn.warn7 {background:#ff4444;}  /* 7일 이하  - 빨강 */
 
@@ -195,16 +196,26 @@ window.attend=function(id){
   });
 }
 
-// 문자 전송 — id 기반으로 data에서 직접 참조
+// 문자 전송 — 상황별 멘트 4가지
 window.sendSMS=function(id){
   const s=data[id];
   if(!s) return;
 
   const remain=(s.start && s.days)
     ? Math.ceil((s.start+s.days*86400000-Date.now())/86400000)
-    : "-";
+    : null;
 
-  const msg=`${s.name}님 안녕하세요 유월화실입니다. 수강횟수 ${s.count}회, 수강기간이 ${remain}일 남았습니다.`;
+  let msg="";
+  if(s.count<=0){
+    msg=`${s.name}님 안녕하세요 유월화실입니다. 수강권이 모두 소진되었습니다. 그림실력이 도망가기전에 꼭 다시 뵈어요!♥^ㅁ^`;
+  } else if(remain!==null && remain<=7){
+    msg=`${s.name}님 안녕하세요 유월화실입니다. 수강권이 ${s.count}회, 수강기간 ${remain}일 남았습니다. 수강권 소진 전 방문부탁드립니다♥`;
+  } else if(remain!==null && remain<=15){
+    msg=`${s.name}님 안녕하세요 유월화실입니다. 수강권이 ${s.count}회, 수강기간 ${remain}일 남았습니다^^ 빠른 시일내 방문 부탁드립니다♥`;
+  } else {
+    msg=`${s.name}님 안녕하세요 유월화실입니다. 수강권이 ${s.count}회, 수강기간이 ${remain}일 남았습니다^^ 편한 시간에 방문 부탁드립니다♥`;
+  }
+
   location.href=`sms:${s.phone}?body=${encodeURIComponent(msg)}`;
 }
 
@@ -356,13 +367,18 @@ function render(){
       remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
     }
 
-    // 문자 버튼: 관리자 + (15일 이하이거나 7일 이하)
+    // 문자 버튼: 관리자일 때 상황별 표시
+    // 0회 소진 → 빨강 / 7일 이하 → 빨강 / 15일 이하 → 주황 / 30일 이하 → 초록
     let smsBtn="";
-    if(isAdmin && remain!=="-"){
-      if(remain<=7){
+    if(isAdmin){
+      if(s.count<=0){
         smsBtn=`<button class="smsBtn warn7" onclick="sendSMS('${id}')">📩 문자</button>`;
-      } else if(remain<=15){
+      } else if(remain!=="-" && remain<=7){
+        smsBtn=`<button class="smsBtn warn7" onclick="sendSMS('${id}')">📩 문자</button>`;
+      } else if(remain!=="-" && remain<=15){
         smsBtn=`<button class="smsBtn warn15" onclick="sendSMS('${id}')">📩 문자</button>`;
+      } else if(remain!=="-" && remain<=30){
+        smsBtn=`<button class="smsBtn warn30" onclick="sendSMS('${id}')">📩 문자</button>`;
       }
     }
 
