@@ -107,6 +107,7 @@ input,textarea{width:100%;margin-bottom:10px;}
     이름 <input id="m_name">
     전화번호 <input id="m_phone">
     남은횟수 <input id="m_count" type="number">
+    남은일수 <input id="m_days" type="number">
     금액 <input id="m_price" type="number">
     메모 <textarea id="m_memo"></textarea>
 
@@ -230,6 +231,8 @@ window.openModal=function(id){
   document.getElementById("m_phone").value=s.phone||"";
   document.getElementById("m_count").value=s.count||0;
   document.getElementById("m_price").value=s.price||0;
+  const remainDays=(s.start&&s.days)?Math.ceil((s.start+s.days*86400000-Date.now())/86400000):0;
+  document.getElementById("m_days").value=remainDays;
   document.getElementById("m_memo").value=s.memo||"";
 
   renderLogs(s);
@@ -245,12 +248,15 @@ window.closeModal=function(){
 
 // 저장
 window.saveStudent=function(){
+  const newRemain=Number(document.getElementById("m_days").value);
   update(ref(db,"students/"+currentId),{
     name:document.getElementById("m_name").value,
     phone:document.getElementById("m_phone").value,
     count:Number(document.getElementById("m_count").value),
     price:Number(document.getElementById("m_price").value),
-    memo:document.getElementById("m_memo").value
+    memo:document.getElementById("m_memo").value,
+    start:Date.now(),
+    days:newRemain
   });
   closeModal();
 }
@@ -367,8 +373,7 @@ function render(){
       remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
     }
 
-    // 문자 버튼: 관리자일 때 상황별 표시
-    // 0회 소진 → 빨강 / 7일 이하 → 빨강 / 15일 이하 → 주황 / 30일 이하 → 초록
+    // 문자 버튼: 필요한 학생에게만 표시
     let smsBtn="";
     if(isAdmin){
       if(s.count<=0){
