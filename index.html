@@ -39,7 +39,7 @@ h1{text-align:center;}
 
 #adminBtn{
   position:fixed;
-  bottom:80px;
+  bottom:20px;
   right:20px;
 }
 
@@ -222,7 +222,16 @@ window.sendSMS=function(id){
 
 // 모달 열기
 window.openModal=function(id){
-  if(!isAdmin) return;
+  if(!isAdmin){
+    const s=data[id];
+    const today=new Date().toISOString().slice(0,10);
+    if(s.logs && s.logs[today]){
+      alert(s.name+"님은 오늘 출석했습니다 ✅");
+    } else {
+      alert(s.name+"님은 오늘 출석하지 않았습니다 ❌");
+    }
+    return;
+  }
 
   currentId=id;
   const s=data[id];
@@ -287,6 +296,15 @@ window.delPay=function(k){
   remove(ref(db,"students/"+currentId+"/payments/"+k));
 }
 
+window.delLog=function(date){
+  if(confirm(date+" 출석 기록을 삭제할까요?")){
+    remove(ref(db,"students/"+currentId+"/logs/"+date));
+    // 횟수 1 복구
+    const s=data[currentId];
+    update(ref(db,"students/"+currentId),{count:s.count+1});
+  }
+}
+
 function renderPayments(s){
   const el=document.getElementById("m_pay");
   el.innerHTML="";
@@ -303,7 +321,7 @@ function renderLogs(s){
   el.innerHTML="";
   if(s.logs){
     Object.keys(s.logs).sort().reverse().forEach(d=>{
-      el.innerHTML+=d+"<br>";
+      el.innerHTML+=`${d} <button onclick="delLog('${d}')">❌</button><br>`;
     });
   }
 }
