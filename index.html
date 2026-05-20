@@ -367,7 +367,7 @@ function render(){
   const listEl=document.getElementById("list");
   listEl.innerHTML="";
 
-  Object.entries(data).forEach(([id,s])=>{
+  Object.entries(data).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','ko')).forEach(([id,s])=>{
     let remain="-";
     if(s.start&&s.days){
       remain=Math.ceil((s.start+s.days*86400000-Date.now())/86400000);
