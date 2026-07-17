@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -669,6 +670,23 @@ onValue(ref(db,"students"),snap=>{
   data=snap.val()||{};
   render();
 });
+
+// 매 시간 정각에 알림 소리
+const timerAudio = new Audio("https://raw.githubusercontent.com/key28me-maker/student-attendence/main/benkirb-shine-11-268907.mp3");
+
+function scheduleHourlyAlarm(){
+  const now = new Date();
+  const msUntilNextHour = (60 - now.getMinutes()) * 60 * 1000 - now.getSeconds() * 1000 - now.getMilliseconds();
+  setTimeout(()=>{
+    timerAudio.currentTime=0;
+    timerAudio.play();
+    setInterval(()=>{
+      timerAudio.currentTime=0;
+      timerAudio.play();
+    }, 60 * 60 * 1000); // 이후 매 1시간마다
+  }, msUntilNextHour);
+}
+scheduleHourlyAlarm();
 
 </script>
 </body>
